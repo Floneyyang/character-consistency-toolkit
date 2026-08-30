@@ -1,0 +1,14 @@
+{
+  "name": "character-consistency-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A small, provenance-first toolkit for canonical character sheets and identity-consistent variations.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "check": "node --check src/*.mjs && node --test",
+    "test": "node --test"
+  }
+}
