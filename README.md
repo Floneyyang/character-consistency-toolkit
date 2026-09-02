@@ -123,4 +123,7 @@ Pull requests and pushes to `main` run the same check on Node.js 22 in GitHub Ac
 - Prompt effectiveness still needs testing across varied character styles, ages, body types, and presentation.
 - This is visual continuity tooling, not biometric identification.
 
-See [docs/architecture.md](docs/architecture.md) for the data flow and extension boundaries.
+## Design documentation
+
+- [Architecture](docs/architecture.md) summarizes the current modules, data flow, and persistence model.
+- [System design](docs/system-design.md) documents the governing invariants, Mermaid diagrams, security decisions, reproducibility strategy, failure semantics, and public-production gates.
