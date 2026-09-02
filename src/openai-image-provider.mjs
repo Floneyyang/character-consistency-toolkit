@@ -41,7 +41,12 @@ async function parseProviderError(response) {
   if (/moderat|safety|policy|content[_ -]?violation/.test(signal)) {
     return new ImageProviderError('moderated', 'OpenAI blocked the image request.');
   }
-  if (/image|reference/.test(signal) && response.status < 500) {
+  if (
+    /input[_ -]?image|reference[_ -]?image|image[_ -]?(?:decode|format|input)|invalid[_ -]?image|unsupported[_ -]?image/.test(
+      signal,
+    ) &&
+    response.status < 500
+  ) {
     return new ImageProviderError('invalid-reference', 'OpenAI rejected a reference image.');
   }
   if (response.status >= 500) {

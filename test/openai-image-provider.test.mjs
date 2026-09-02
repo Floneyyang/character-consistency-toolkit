@@ -104,3 +104,49 @@ test('maps malformed image output to an invalid response', async () => {
     (error) => error instanceof ImageProviderError && error.kind === 'invalid-response',
   );
 });
+
+test('does not misclassify a generic model error as an invalid reference', async () => {
+  const provider = new OpenAIImageProvider({
+    apiKey: 'test-key',
+    fetchImplementation: async () =>
+      new Response(
+        JSON.stringify({ error: { message: 'gpt-image-2 rejected this request parameter' } }),
+        {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+  });
+
+  await assert.rejects(
+    () =>
+      provider.generate({
+        prompt: 'Create a sheet.',
+        references: [{ role: 'approved-character', bytes: PNG }],
+        size: '1536x1024',
+      }),
+    (error) => error instanceof ImageProviderError && error.kind === 'invalid-request',
+  );
+});
+
+test('maps explicit invalid input-image errors to invalid reference', async () => {
+  const provider = new OpenAIImageProvider({
+    apiKey: 'test-key',
+    fetchImplementation: async () =>
+      new Response(JSON.stringify({ error: { code: 'invalid_image_format' } }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      }),
+  });
+
+  await assert.rejects(
+    () =>
+      provider.generate({
+        prompt: 'Create a sheet.',
+        references: [{ role: 'approved-character', bytes: PNG }],
+        size: '1536x1024',
+      }),
+    (error) =>
+      error instanceof ImageProviderError && error.kind === 'invalid-reference',
+  );
+});
