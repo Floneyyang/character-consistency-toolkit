@@ -1,4 +1,4 @@
-# System Design: Character Consistency Toolkit
+# Development Design: Character Consistency Toolkit
 
 ## Status and purpose
 
@@ -180,21 +180,15 @@ The manifest is the index and provenance record. It contains the character ID, n
 
 The file store was chosen over a database because the current product has one local writer, modest data volume, and a strong need for inspectability and portability. This is a deliberate scope decision, not a claim that filesystem persistence supports concurrent public traffic.
 
-## Security decisions
+## Three primary security decisions
 
-| Decision | Threat or failure addressed | Current mechanism | Limitation |
+| Decision | Threats addressed | Current mechanism | Limitation |
 | --- | --- | --- | --- |
-| Server-only credentials | Key theft through browser bundles or source inspection | `OPENAI_API_KEY` is read only by `src/server.mjs`; CSP restricts browser connections | Local machine security still protects `.env` |
-| Loopback-only binding | Accidental exposure on the LAN or internet | Server listens on `127.0.0.1` | Not a public deployment model |
-| Same-origin browser API | Cross-site invocation of local generation | UI and API share one origin; no permissive CORS behavior | A public version needs authentication and CSRF review |
-| Content Security Policy | Script injection and unintended outbound browser calls | Self-only scripts, styles, images, and connections | CSP complements rather than replaces input safety |
-| Size and type validation | Memory abuse and malformed uploads | JSON and image byte limits plus PNG, JPEG, and WebP signature detection | Content scanning is out of scope for the trusted localhost model and must be reassessed before accepting public uploads |
-| Domain validation | Oversized or malformed names and briefs | Central validators normalize and bound text before persistence or generation | Provider safety decisions remain external |
-| Safe public errors | Provider response leakage or secret exposure | Provider errors map to stable categories and generic browser messages | Detailed provider bodies are intentionally not returned to the UI |
-| Path confinement | Reading or overwriting arbitrary files | IDs and relative asset paths are validated; traversal and absolute paths are rejected | The store assumes its configured root is trusted |
-| Immutable asset writes | Silent replacement of historical evidence | Files use exclusive creation and are never overwritten | Immutability is local, not WORM storage |
-| Timeout and no blind retry | Duplicate billable work after uncertain network outcomes | Provider timeout plus explicit `outcome-unknown`; no automatic retry | Manual reconciliation may be needed |
-| Sensitive-trait boundary | Turning continuity tooling into identity classification | Prompts prohibit demographic labeling; no face recognition or biometric score | Human review must follow the same rule |
+| **Keep credentials and provider access inside the trusted server boundary** | API-key theft, browser-bundle exposure, and unintended client-side provider calls | `OPENAI_API_KEY` is read only by `src/server.mjs`; the server binds to `127.0.0.1`; the UI uses a same-origin API; CSP restricts browser scripts and connections | The local machine still protects `.env`; a public deployment requires managed secrets, HTTPS, authentication, authorization, and CSRF review |
+| **Treat every browser value and filesystem path as untrusted input** | Oversized payloads, malformed images, path traversal, arbitrary file access, and invalid domain state | JSON and image byte limits, PNG/JPEG/WebP signature detection, centralized text validation, validated IDs, and confined relative asset paths | Content scanning is outside the trusted localhost scope and must be reassessed before accepting public uploads |
+| **Fail without leaking or corrupting state** | Provider-detail exposure, orphaned assets, silent history changes, and duplicate billable retries after uncertain outcomes | Stable public error categories, exclusive immutable asset writes, transactional cleanup, atomic manifest replacement, provider timeout, and no automatic retry for `outcome-unknown` | Detailed provider diagnostics and billing reconciliation remain manual; local immutability is not write-once storage |
+
+Sensitive-trait inference is also prohibited at the product-policy layer: prompts do not label demographic traits, and the toolkit implements neither face recognition nor biometric scoring.
 
 The current security boundary is intentionally narrow: one trusted person on one machine. Publishing this server without authentication, authorization, rate limits, HTTPS, and durable secret management would violate the design.
 

@@ -126,4 +126,4 @@ Pull requests and pushes to `main` run the same check on Node.js 22 in GitHub Ac
 ## Design documentation
 
 - [Architecture](docs/architecture.md) summarizes the current modules, data flow, and persistence model.
-- [System design](docs/system-design.md) documents the governing invariants, Mermaid diagrams, security decisions, reproducibility strategy, failure semantics, and public-production gates.
+- [Development design](docs/dev-design.md) documents the governing invariants, Mermaid diagrams, three primary security decisions, reproducibility strategy, failure semantics, and public-production gates.
