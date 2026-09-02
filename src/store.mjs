@@ -6,7 +6,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+import { dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import {
   assertCharacterManifest,
   assertId,
@@ -68,8 +68,7 @@ export class FileCharacterStore {
     };
   }
 
-  async ingestSourceImage(characterId, role, sourcePath) {
-    const bytes = await readFile(resolve(sourcePath));
+  async ingestSourceImageBytes(characterId, role, bytes) {
     const mimeType = assertImage(bytes, `${role} image`);
     const extension = extensionForMimeType(mimeType);
     const asset = await this.writeImage(
@@ -77,7 +76,7 @@ export class FileCharacterStore {
       `assets/sources/${role}.${extension}`,
       bytes,
     );
-    return { ...asset, role, originalName: basename(sourcePath), bytesContent: bytes };
+    return { ...asset, role, bytesContent: bytes };
   }
 
   async readImage(characterId, relativePath) {

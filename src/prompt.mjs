@@ -6,6 +6,11 @@ import { sha256 } from './domain.mjs';
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 const PROMPTS = {
+  photoCanonical: {
+    id: 'photo-character-sheet',
+    version: 'v1',
+    path: resolve(PROJECT_ROOT, 'prompts/photo-character-sheet-v1.md'),
+  },
   canonical: {
     id: 'canonical-sheet',
     version: 'v1',
@@ -17,6 +22,12 @@ const PROMPTS = {
     path: resolve(PROJECT_ROOT, 'prompts/variation-v1.md'),
   },
 };
+
+export function renderPhotoCanonicalPrompt(characterName) {
+  return renderPrompt(PROMPTS.photoCanonical, {
+    CHARACTER_NAME: characterName,
+  });
+}
 
 async function renderPrompt(definition, variables) {
   let text = await readFile(definition.path, 'utf8');

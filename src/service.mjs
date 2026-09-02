@@ -1,13 +1,18 @@
+import { readFile } from 'node:fs/promises';
 import {
   assertCharacterName,
   assertId,
   assertVariationBrief,
   createId,
 } from './domain.mjs';
-import { renderCanonicalPrompt, renderVariationPrompt } from './prompt.mjs';
+import {
+  renderCanonicalPrompt,
+  renderPhotoCanonicalPrompt,
+  renderVariationPrompt,
+} from './prompt.mjs';
 
 function publicAsset(asset) {
-  const { bytesContent: _bytesContent, originalName: _originalName, ...metadata } = asset;
+  const { bytesContent: _bytesContent, ...metadata } = asset;
   return metadata;
 }
 
@@ -19,33 +24,75 @@ export class CharacterConsistencyService {
   }
 
   async createCharacter({ name, approvedImagePath, supportingPhotoPath }) {
-    const characterName = assertCharacterName(name);
     if (typeof approvedImagePath !== 'string' || approvedImagePath.length === 0) {
       throw new Error('An approved character image path is required.');
+    }
+    const approvedImage = await readFile(approvedImagePath);
+    const supportingPhoto = supportingPhotoPath
+      ? await readFile(supportingPhotoPath)
+      : null;
+    return this.createCharacterFromImages({
+      name,
+      approvedImage,
+      supportingPhoto,
+    });
+  }
+
+  async createCharacterFromImages({ name, approvedImage, supportingPhoto }) {
+    return this.#createCanonicalCharacter({
+      name,
+      primaryImage: approvedImage,
+      primaryRole: 'approved-character',
+      supportingPhoto,
+      renderPrompt: (characterName) =>
+        renderCanonicalPrompt(characterName, Boolean(supportingPhoto)),
+    });
+  }
+
+  async createCharacterSheetFromPhoto({ name, photo }) {
+    return this.#createCanonicalCharacter({
+      name,
+      primaryImage: photo,
+      primaryRole: 'source-photo',
+      supportingPhoto: null,
+      renderPrompt: renderPhotoCanonicalPrompt,
+    });
+  }
+
+  async #createCanonicalCharacter({
+    name,
+    primaryImage,
+    primaryRole,
+    supportingPhoto,
+    renderPrompt,
+  }) {
+    const characterName = assertCharacterName(name);
+    if (!Buffer.isBuffer(primaryImage)) {
+      throw new Error('A primary character image is required.');
     }
     const characterId = createId('character');
     await this.store.createCharacterDirectory(characterId);
 
     try {
-      const approved = await this.store.ingestSourceImage(
+      const primary = await this.store.ingestSourceImageBytes(
         characterId,
-        'approved-character',
-        approvedImagePath,
+        primaryRole,
+        primaryImage,
       );
-      const supporting = supportingPhotoPath
-        ? await this.store.ingestSourceImage(
+      const supporting = supportingPhoto
+        ? await this.store.ingestSourceImageBytes(
             characterId,
             'supporting-photo',
-            supportingPhotoPath,
+            supportingPhoto,
           )
         : null;
-      const prompt = await renderCanonicalPrompt(characterName, Boolean(supporting));
+      const prompt = await renderPrompt(characterName);
       const references = [
         {
-          role: 'approved-character',
-          bytes: approved.bytesContent,
-          mimeType: approved.mimeType,
-          sha256: approved.sha256,
+          role: primaryRole,
+          bytes: primary.bytesContent,
+          mimeType: primary.mimeType,
+          sha256: primary.sha256,
         },
         ...(supporting
           ? [
@@ -76,7 +123,10 @@ export class CharacterConsistencyService {
         createdAt: now,
         updatedAt: now,
         identity: {
-          sources: [publicAsset(approved), ...(supporting ? [publicAsset(supporting)] : [])],
+          sources: [
+            publicAsset(primary),
+            ...(supporting ? [publicAsset(supporting)] : []),
+          ],
           canonicalSheet,
           generation: {
             prompt,
@@ -157,6 +207,19 @@ export class CharacterConsistencyService {
 
   getCharacter(characterId) {
     return this.store.getCharacter(characterId);
+  }
+
+  async getCanonicalSheet(characterId) {
+    const manifest = await this.store.getCharacter(characterId);
+    const image = await this.store.readImage(
+      characterId,
+      manifest.identity.canonicalSheet.path,
+    );
+    return {
+      bytes: image.bytes,
+      mimeType: image.mimeType,
+      sha256: manifest.identity.canonicalSheet.sha256,
+    };
   }
 
   listCharacters() {

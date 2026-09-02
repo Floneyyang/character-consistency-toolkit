@@ -1,6 +1,6 @@
 # Character Consistency Toolkit
 
-A small, independent toolkit for testing visual character continuity across generated images.
+A small, independent local website and toolkit for testing visual character continuity across generated images.
 
 It turns one creator-approved character image—and optionally one supporting source photo—into a canonical three-panel reference sheet. Later variations use that sheet as their only visual identity authority. Every stored result includes immutable asset hashes and exact generation provenance.
 
@@ -13,10 +13,11 @@ It turns one creator-approved character image—and optionally one supporting so
 - Exact prompt, prompt hash, provider, model, parameters, request ID, and usage capture
 - Permanent character deletion, including locally stored source images and generated assets
 - A small command-line interface
+- A localhost drag-and-drop website for creating a sheet from one image
 - One real provider adapter: OpenAI GPT Image 2
 - Tests that use a fake provider and make no paid API calls
 
-It intentionally does **not** include a web UI, user accounts, a database, background queues, cloud storage, automatic retries, face recognition, or a dependency on Floney's Doll Factory.
+It intentionally does **not** include user accounts, a database, background queues, cloud storage, automatic retries, face recognition, or a dependency on Floney's Doll Factory.
 
 ## Requirements
 
@@ -39,7 +40,25 @@ OPENAI_API_KEY=your_key_here
 
 The `.env` file and all generated `data/` are ignored by Git.
 
-## Use
+## Use the local website
+
+Start the localhost server:
+
+```bash
+npm run dev
+```
+
+Then open [http://127.0.0.1:4173](http://127.0.0.1:4173). The personal workflow is:
+
+1. Enter an optional character name.
+2. Drop in one clear PNG, JPEG, or WebP reference image.
+3. Select **Create character sheet**.
+4. Keep the page open while GPT Image creates the three coordinated views.
+5. Review and download the canonical sheet.
+
+The site binds only to `127.0.0.1`. The API key stays in the Node process and is never sent to browser code. Source images, generated sheets, manifests, and provenance are stored in the Git-ignored local `data/` folder. A live generation uses paid provider capacity; automated tests never call the provider.
+
+## Use the CLI
 
 Create a character from an approved character image:
 
@@ -95,6 +114,7 @@ Pull requests and pushes to `main` run the same check on Node.js 22 in GitHub Ac
 
 - It assumes one local writer at a time.
 - Generation is synchronous and may take several minutes.
+- Closing or refreshing the page does not cancel an in-flight provider request.
 - It does not automatically retry billable requests with unknown outcomes.
 - Evaluation is currently human review, not an automated identity score.
 - Prompt effectiveness still needs testing across varied character styles, ages, body types, and presentation.

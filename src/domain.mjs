@@ -34,6 +34,17 @@ export function sha256(bytesOrText) {
   return createHash('sha256').update(bytesOrText).digest('hex');
 }
 
+export function decodeBase64Image(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  const normalized = value.replace(/\s/g, '');
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || normalized.length % 4 === 1) {
+    return null;
+  }
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  const bytes = Buffer.from(padded, 'base64');
+  return bytes.length > 0 ? bytes : null;
+}
+
 export function detectImageMimeType(bytes) {
   if (!Buffer.isBuffer(bytes) || bytes.length < 12) return null;
   if (

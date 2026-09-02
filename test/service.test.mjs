@@ -113,6 +113,48 @@ test('creates a variation from the canonical sheet only', async (t) => {
   assert.equal(persisted.variations[0].id, variation.id);
 });
 
+test('creates a canonical sheet directly from in-memory image bytes', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+
+  const character = await context.service.createCharacterFromImages({
+    name: 'Mina',
+    approvedImage: PNG,
+  });
+
+  assert.equal(character.name, 'Mina');
+  assert.deepEqual(
+    context.provider.calls[0].references.map((reference) => reference.role),
+    ['approved-character'],
+  );
+  assert.equal(character.identity.sources[0].mimeType, 'image/png');
+});
+
+test('creates a photo-first sheet with source-photo provenance', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+
+  const character = await context.service.createCharacterSheetFromPhoto({
+    name: 'Mina',
+    photo: PNG,
+  });
+
+  assert.deepEqual(
+    context.provider.calls[0].references.map((reference) => reference.role),
+    ['source-photo'],
+  );
+  assert.equal(character.identity.sources[0].role, 'source-photo');
+  assert.equal(character.identity.generation.prompt.id, 'photo-character-sheet');
+  assert.match(
+    context.provider.calls[0].prompt,
+    /one horizontal frame containing exactly three equal vertical panels/,
+  );
+  assert.match(context.provider.calls[0].prompt, /Reference image 1 is the sole visual identity authority/);
+  assert.match(context.provider.calls[0].prompt, /Do not beautify/);
+  assert.match(context.provider.calls[0].prompt, /same outfit and details must appear unchanged/);
+  assert.match(context.provider.calls[0].prompt, /18% gray seamless background/);
+});
+
 test('permanently deletes the character directory', async (t) => {
   const context = await fixture();
   t.after(() => rm(context.directory, { recursive: true, force: true }));
