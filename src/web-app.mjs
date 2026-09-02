@@ -85,7 +85,10 @@ function publicGenerationError(error) {
   if (error?.code === 'ENOENT') {
     return new HttpError(404, 'NOT_FOUND', 'The requested character sheet was not found.');
   }
-  if (error instanceof Error && /image|character name/i.test(error.message)) {
+  if (
+    error instanceof Error &&
+    /image|character name|outfit direction/i.test(error.message)
+  ) {
     return new HttpError(400, 'INVALID_INPUT', error.message);
   }
   return new HttpError(500, 'INTERNAL_ERROR', 'The local server could not complete the request.');
@@ -123,6 +126,7 @@ export function createWebApp({ service, providerConfigured, webDirectory }) {
         const character = await service.createCharacterSheetFromPhoto({
           name: payload?.name || 'My Character',
           photo: bytes,
+          outfitDirection: payload?.outfitDirection,
         });
         sendJson(response, 201, {
           character: {

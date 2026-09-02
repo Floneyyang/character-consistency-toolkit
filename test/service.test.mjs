@@ -137,6 +137,7 @@ test('creates a photo-first sheet with source-photo provenance', async (t) => {
   const character = await context.service.createCharacterSheetFromPhoto({
     name: 'Mina',
     photo: PNG,
+    outfitDirection: 'A tailored navy suit with silver loafers.',
   });
 
   assert.deepEqual(
@@ -145,14 +146,54 @@ test('creates a photo-first sheet with source-photo provenance', async (t) => {
   );
   assert.equal(character.identity.sources[0].role, 'source-photo');
   assert.equal(character.identity.generation.prompt.id, 'photo-character-sheet');
+  assert.equal(character.identity.generation.prompt.version, 'v2');
+  assert.deepEqual(character.identity.creationInputs, {
+    outfitDirection: 'A tailored navy suit with silver loafers.',
+  });
   assert.match(
     context.provider.calls[0].prompt,
     /one horizontal frame containing exactly three equal vertical panels/,
   );
   assert.match(context.provider.calls[0].prompt, /Reference image 1 is the sole visual identity authority/);
   assert.match(context.provider.calls[0].prompt, /Do not beautify/);
-  assert.match(context.provider.calls[0].prompt, /same outfit and details must appear unchanged/);
+  assert.match(context.provider.calls[0].prompt, /tailored navy suit/);
+  assert.match(context.provider.calls[0].prompt, /must not change identity/);
+  assert.match(
+    context.provider.calls[0].prompt,
+    /same outfit, footwear, and wearable details must appear unchanged/,
+  );
   assert.match(context.provider.calls[0].prompt, /18% gray seamless background/);
+});
+
+test('preserves source wardrobe when no outfit direction is supplied', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+
+  const character = await context.service.createCharacterSheetFromPhoto({
+    name: 'Mina',
+    photo: PNG,
+  });
+
+  assert.deepEqual(character.identity.creationInputs, { outfitDirection: null });
+  assert.match(context.provider.calls[0].prompt, /No wardrobe direction was supplied/);
+  assert.match(context.provider.calls[0].prompt, /Preserve the visible clothing/);
+});
+
+test('rejects an outfit direction longer than 500 characters before generation', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+
+  await assert.rejects(
+    () =>
+      context.service.createCharacterSheetFromPhoto({
+        name: 'Mina',
+        photo: PNG,
+        outfitDirection: 'x'.repeat(501),
+      }),
+    /no more than 500 characters/,
+  );
+  assert.equal(context.provider.calls.length, 0);
+  assert.deepEqual(await context.store.listCharacters(), []);
 });
 
 test('permanently deletes the character directory', async (t) => {

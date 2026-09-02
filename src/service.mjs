@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import {
   assertCharacterName,
   assertId,
+  assertOutfitDirection,
   assertVariationBrief,
   createId,
 } from './domain.mjs';
@@ -49,13 +50,18 @@ export class CharacterConsistencyService {
     });
   }
 
-  async createCharacterSheetFromPhoto({ name, photo }) {
+  async createCharacterSheetFromPhoto({ name, photo, outfitDirection }) {
+    const normalizedOutfitDirection = assertOutfitDirection(outfitDirection);
     return this.#createCanonicalCharacter({
       name,
       primaryImage: photo,
       primaryRole: 'source-photo',
       supportingPhoto: null,
-      renderPrompt: renderPhotoCanonicalPrompt,
+      renderPrompt: (characterName) =>
+        renderPhotoCanonicalPrompt(characterName, normalizedOutfitDirection),
+      creationInputs: {
+        outfitDirection: normalizedOutfitDirection || null,
+      },
     });
   }
 
@@ -65,6 +71,7 @@ export class CharacterConsistencyService {
     primaryRole,
     supportingPhoto,
     renderPrompt,
+    creationInputs = null,
   }) {
     const characterName = assertCharacterName(name);
     if (!Buffer.isBuffer(primaryImage)) {
@@ -123,6 +130,7 @@ export class CharacterConsistencyService {
         createdAt: now,
         updatedAt: now,
         identity: {
+          ...(creationInputs ? { creationInputs } : {}),
           sources: [
             publicAsset(primary),
             ...(supporting ? [publicAsset(supporting)] : []),

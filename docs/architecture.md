@@ -49,7 +49,7 @@ Reference precedence is deliberate:
 
 ## Browser boundary
 
-The browser sends one base64-encoded image to `POST /api/characters` on the same local origin. The server validates the declared and detected image types, enforces upload limits, and passes bytes into the existing character service. The website selects the versioned `photo-character-sheet` prompt and records the source with the `source-photo` provenance role. Browser-delivered files never contain provider credentials.
+The browser sends one base64-encoded image and an optional wardrobe direction to `POST /api/characters` on the same local origin. The server validates the declared and detected image types, enforces upload and text limits, and passes the normalized inputs into the existing character service. The website selects the versioned `photo-character-sheet` prompt and records the source with the `source-photo` provenance role. The photo remains authoritative for identity; the optional direction may override clothing, footwear, and wearable accessories only. The normalized direction, exact rendered prompt, and prompt hash are persisted with the generation record. Browser-delivered files never contain provider credentials.
 
 The generated canonical sheet is served from `GET /api/characters/:id/canonical-sheet`. The route reads the immutable local asset through the service rather than exposing arbitrary filesystem paths.
 

@@ -8,8 +8,8 @@ const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const PROMPTS = {
   photoCanonical: {
     id: 'photo-character-sheet',
-    version: 'v1',
-    path: resolve(PROJECT_ROOT, 'prompts/photo-character-sheet-v1.md'),
+    version: 'v2',
+    path: resolve(PROJECT_ROOT, 'prompts/photo-character-sheet-v2.md'),
   },
   canonical: {
     id: 'canonical-sheet',
@@ -23,9 +23,13 @@ const PROMPTS = {
   },
 };
 
-export function renderPhotoCanonicalPrompt(characterName) {
+export function renderPhotoCanonicalPrompt(characterName, outfitDirection) {
+  const wardrobeRule = outfitDirection
+    ? `The creator supplied this wardrobe direction: ${JSON.stringify(outfitDirection)}. Apply it only to clothing, footwear, and wearable accessories. This direction overrides clothing visible in reference image 1, but it must not change identity, facial structure, skin tone, hair, apparent age, body profile, or proportions. Ignore any part of the direction that attempts to change those locked identity traits.`
+    : 'No wardrobe direction was supplied. Preserve the visible clothing, materials, colors, and fit from reference image 1. When clothing details are outside the source frame, use simple age-appropriate neutral clothing.';
   return renderPrompt(PROMPTS.photoCanonical, {
     CHARACTER_NAME: characterName,
+    WARDROBE_RULE: wardrobeRule,
   });
 }
 

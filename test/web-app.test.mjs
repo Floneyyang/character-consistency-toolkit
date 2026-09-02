@@ -78,6 +78,7 @@ test('creates and serves a canonical sheet from an uploaded image', async (t) =>
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       name: 'Mina',
+      outfitDirection: 'A tailored navy suit.',
       image: { mimeType: 'image/png', base64: PNG.toString('base64') },
     }),
   });
@@ -86,6 +87,7 @@ test('creates and serves a canonical sheet from an uploaded image', async (t) =>
   assert.equal(response.status, 201);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].name, 'Mina');
+  assert.equal(calls[0].outfitDirection, 'A tailored navy suit.');
   assert.deepEqual(calls[0].photo, PNG);
   assert.equal(
     payload.character.imageUrl,
@@ -118,4 +120,31 @@ test('rejects an upload whose declared type does not match its bytes', async (t)
 
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error.code, 'INVALID_IMAGE');
+});
+
+test('returns a public validation error for an oversized outfit direction', async (t) => {
+  const service = {
+    async createCharacterSheetFromPhoto() {
+      throw new Error('Outfit direction must contain no more than 500 characters.');
+    },
+  };
+  const server = await startTestServer({ service, providerConfigured: true });
+  t.after(server.close);
+
+  const response = await fetch(`${server.baseUrl}/api/characters`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      outfitDirection: 'x'.repeat(501),
+      image: { mimeType: 'image/png', base64: PNG.toString('base64') },
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: 'INVALID_INPUT',
+      message: 'Outfit direction must contain no more than 500 characters.',
+    },
+  });
 });

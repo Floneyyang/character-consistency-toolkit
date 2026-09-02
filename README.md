@@ -51,10 +51,13 @@ npm run dev
 Then open [http://127.0.0.1:4173](http://127.0.0.1:4173). The personal workflow is:
 
 1. Enter an optional character name.
-2. Drop in one clear PNG, JPEG, or WebP reference image.
-3. Select **Create character sheet**.
-4. Keep the page open while GPT Image creates the three coordinated views.
-5. Review and download the canonical sheet.
+2. Optionally describe how the character should be dressed.
+3. Drop in one clear PNG, JPEG, or WebP reference image.
+4. Select **Create character sheet**.
+5. Keep the page open while GPT Image creates the three coordinated views.
+6. Review and download the canonical sheet.
+
+The photo remains authoritative for identity, hair, apparent age, body profile, and proportions. The optional text direction controls clothing, footwear, and wearable accessories only.
 
 The site binds only to `127.0.0.1`. The API key stays in the Node process and is never sent to browser code. Source images, generated sheets, manifests, and provenance are stored in the Git-ignored local `data/` folder. A live generation uses paid provider capacity; automated tests never call the provider.
 

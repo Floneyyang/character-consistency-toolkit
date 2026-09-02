@@ -30,6 +30,18 @@ export function assertVariationBrief(value) {
   return brief;
 }
 
+export function assertOutfitDirection(value) {
+  if (value == null) return '';
+  if (typeof value !== 'string') {
+    throw new Error('Outfit direction must be text.');
+  }
+  const direction = value.trim();
+  if (direction.length > 500) {
+    throw new Error('Outfit direction must contain no more than 500 characters.');
+  }
+  return direction;
+}
+
 export function sha256(bytesOrText) {
   return createHash('sha256').update(bytesOrText).digest('hex');
 }

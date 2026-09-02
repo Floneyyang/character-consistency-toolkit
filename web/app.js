@@ -3,6 +3,7 @@ const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 const form = document.querySelector('#character-form');
 const nameInput = document.querySelector('#character-name');
+const outfitInput = document.querySelector('#outfit-direction');
 const fileInput = document.querySelector('#reference-image');
 const dropZone = document.querySelector('#drop-zone');
 const preview = document.querySelector('#reference-preview');
@@ -133,6 +134,7 @@ async function createCharacterSheet(event) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         name: nameInput.value.trim() || 'My Character',
+        outfitDirection: outfitInput.value.trim(),
         image: { mimeType: selectedFile.type, base64 },
       }),
     });
