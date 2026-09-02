@@ -53,6 +53,8 @@ The browser sends one base64-encoded image and an optional wardrobe direction to
 
 The generated canonical sheet is served from `GET /api/characters/:id/canonical-sheet`. The route reads the immutable local asset through the service rather than exposing arbitrary filesystem paths.
 
+Photo prompt revisions are immutable. Version 2 introduced wardrobe direction but used adversarial-sounding precedence language that caused provider rejections for otherwise benign text. Version 3 preserves the same product precedence with neutral apparel-only wording and an explicit fully-clothed constraint.
+
 ## Persistence
 
 ```text

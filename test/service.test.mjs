@@ -146,7 +146,7 @@ test('creates a photo-first sheet with source-photo provenance', async (t) => {
   );
   assert.equal(character.identity.sources[0].role, 'source-photo');
   assert.equal(character.identity.generation.prompt.id, 'photo-character-sheet');
-  assert.equal(character.identity.generation.prompt.version, 'v2');
+  assert.equal(character.identity.generation.prompt.version, 'v3');
   assert.deepEqual(character.identity.creationInputs, {
     outfitDirection: 'A tailored navy suit with silver loafers.',
   });
@@ -157,7 +157,8 @@ test('creates a photo-first sheet with source-photo provenance', async (t) => {
   assert.match(context.provider.calls[0].prompt, /Reference image 1 is the sole visual identity authority/);
   assert.match(context.provider.calls[0].prompt, /Do not beautify/);
   assert.match(context.provider.calls[0].prompt, /tailored navy suit/);
-  assert.match(context.provider.calls[0].prompt, /must not change identity/);
+  assert.match(context.provider.calls[0].prompt, /subject remains fully clothed/);
+  assert.doesNotMatch(context.provider.calls[0].prompt, /overrides clothing|Ignore any part/);
   assert.match(
     context.provider.calls[0].prompt,
     /same outfit, footwear, and wearable details must appear unchanged/,
