@@ -89,6 +89,8 @@ This project has no third-party runtime or test dependencies.
 npm run check
 ```
 
+Pull requests and pushes to `main` run the same check on Node.js 22 in GitHub Actions. Tests never call a live image provider.
+
 ## Current limits
 
 - It assumes one local writer at a time.
