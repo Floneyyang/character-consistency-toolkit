@@ -107,15 +107,25 @@ sequenceDiagram
     Prompt-->>Domain: Exact text, ID, version, and SHA-256
     Domain->>Provider: Send prompt and ordered references
     Provider->>Model: Server-side authenticated image edit
-    Model-->>Provider: Generated PNG and request metadata
-    Provider-->>Domain: Bytes and provider provenance
-    Domain->>Store: Write immutable generated asset
-    Domain->>Store: Atomically commit manifest
-    Domain-->>API: Return character record
-    API-->>UI: Return immutable sheet URL
 
-    alt failure before manifest commit
-        Domain->>Store: Remove staged character data or orphan asset
+    alt provider returns an image
+        Model-->>Provider: Generated PNG and request metadata
+        Provider-->>Domain: Bytes and provider provenance
+        Domain->>Store: Write immutable generated asset
+
+        alt manifest commit succeeds
+            Domain->>Store: Atomically commit manifest
+            Domain-->>API: Return character record
+            API-->>UI: Return immutable sheet URL
+        else local commit fails
+            Domain->>Store: Remove staged character data or orphan asset
+            Domain-->>API: Propagate failure
+            API-->>UI: Return stable public error
+        end
+    else provider rejects, times out, or has unknown outcome
+        Provider-->>Domain: Stable provider error category
+        Domain->>Store: Remove staged character data
+        Domain-->>API: Propagate failure
         API-->>UI: Return stable public error
     end
 ```
@@ -178,7 +188,7 @@ The file store was chosen over a database because the current product has one lo
 | Loopback-only binding | Accidental exposure on the LAN or internet | Server listens on `127.0.0.1` | Not a public deployment model |
 | Same-origin browser API | Cross-site invocation of local generation | UI and API share one origin; no permissive CORS behavior | A public version needs authentication and CSRF review |
 | Content Security Policy | Script injection and unintended outbound browser calls | Self-only scripts, styles, images, and connections | CSP complements rather than replaces input safety |
-| Size and type validation | Memory abuse and malformed uploads | JSON and image byte limits plus PNG, JPEG, and WebP signature detection | No malware scanner is needed for the current local image-only scope |
+| Size and type validation | Memory abuse and malformed uploads | JSON and image byte limits plus PNG, JPEG, and WebP signature detection | Content scanning is out of scope for the trusted localhost model and must be reassessed before accepting public uploads |
 | Domain validation | Oversized or malformed names and briefs | Central validators normalize and bound text before persistence or generation | Provider safety decisions remain external |
 | Safe public errors | Provider response leakage or secret exposure | Provider errors map to stable categories and generic browser messages | Detailed provider bodies are intentionally not returned to the UI |
 | Path confinement | Reading or overwriting arbitrary files | IDs and relative asset paths are validated; traversal and absolute paths are rejected | The store assumes its configured root is trusted |
