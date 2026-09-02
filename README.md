@@ -1,4 +1,4 @@
-# Character Consistency Lab
+# Character Consistency Toolkit
 
 A small, independent toolkit for testing visual character continuity across generated images.
 
