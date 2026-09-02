@@ -26,6 +26,11 @@ const tryAgainButton = document.querySelector('#try-again');
 let selectedFile = null;
 let previewUrl = null;
 let loadingMessageTimer = null;
+let providerReady = false;
+
+function syncGenerateButton() {
+  generateButton.disabled = !selectedFile || !providerReady;
+}
 
 function formatBytes(bytes) {
   return bytes < 1024 * 1024
@@ -50,7 +55,7 @@ function showFileError(message) {
   fileInput.value = '';
   clearPreviewUrl();
   preview.hidden = true;
-  generateButton.disabled = true;
+  syncGenerateButton();
   errorMessage.textContent = message;
   setOutputState('error');
 }
@@ -71,7 +76,7 @@ function selectFile(file) {
   previewName.textContent = file.name;
   previewDetails.textContent = formatBytes(file.size);
   preview.hidden = false;
-  generateButton.disabled = false;
+  syncGenerateButton();
   setOutputState('empty');
 }
 
@@ -80,7 +85,7 @@ function removeFile() {
   fileInput.value = '';
   clearPreviewUrl();
   preview.hidden = true;
-  generateButton.disabled = true;
+  syncGenerateButton();
   setOutputState('empty');
 }
 
@@ -147,7 +152,7 @@ async function createCharacterSheet(event) {
     setOutputState('error');
   } finally {
     endLoadingMessages();
-    generateButton.disabled = !selectedFile;
+    syncGenerateButton();
   }
 }
 
@@ -174,10 +179,14 @@ dropZone.addEventListener('drop', (event) => selectFile(event.dataTransfer?.file
 fetch('/api/health')
   .then((response) => response.json())
   .then((health) => {
-    configurationNote.hidden = health.ready;
+    providerReady = health.ready === true;
+    configurationNote.hidden = providerReady;
+    syncGenerateButton();
   })
   .catch(() => {
+    providerReady = false;
     configurationNote.hidden = false;
+    syncGenerateButton();
   });
 
 window.addEventListener('beforeunload', clearPreviewUrl);
