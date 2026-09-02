@@ -4,6 +4,8 @@
 
 Character Consistency Lab is an independent local research tool. It does not import code, data, or prompts from Floney's Doll Factory. Proven techniques may later be reimplemented in another product, but neither repository depends on the other.
 
+The primary personal-use interface is a local website bound to `127.0.0.1`. The CLI remains available for repeatable experiments and automation.
+
 ## Core flow
 
 ```text
@@ -41,6 +43,17 @@ Reference precedence is deliberate:
 - `src/store.mjs` owns local files, immutable asset writes, atomic manifest replacement, and deletion.
 - `src/service.mjs` owns the canonical-sheet and variation workflows.
 - `src/cli.mjs` is a thin local interface over the service.
+- `src/web-app.mjs` serves the static site, validates browser uploads, maps safe API errors, and returns generated sheets.
+- `src/server.mjs` constructs the local provider, service, store, and HTTP server without exposing credentials.
+- `web/` contains the dependency-free drag-and-drop interface.
+
+## Browser boundary
+
+The browser sends one base64-encoded image and an optional wardrobe direction to `POST /api/characters` on the same local origin. The server validates the declared and detected image types, enforces upload and text limits, and passes the normalized inputs into the existing character service. The website selects the versioned `photo-character-sheet` prompt and records the source with the `source-photo` provenance role. The photo remains authoritative for identity; the optional direction may override clothing, footwear, and wearable accessories only. The normalized direction, exact rendered prompt, and prompt hash are persisted with the generation record. Browser-delivered files never contain provider credentials.
+
+The generated canonical sheet is served from `GET /api/characters/:id/canonical-sheet`. The route reads the immutable local asset through the service rather than exposing arbitrary filesystem paths.
+
+Photo prompt revisions are immutable. Version 2 introduced wardrobe direction but used adversarial-sounding precedence language that caused provider rejections for otherwise benign text. Version 3 preserves the same product precedence with neutral apparel-only wording and an explicit fully-clothed constraint.
 
 ## Persistence
 
@@ -61,4 +74,4 @@ Assets are never overwritten. `manifest.json` is replaced atomically after a suc
 
 ## Deliberate omissions
 
-There is no HTTP server, database, queue, authentication system, cloud object store, provider router, or automatic evaluation system. Add those only after experiments show that multiple users, concurrency, or automation are real requirements.
+There is no public server, database, queue, authentication system, cloud object store, provider router, or automatic evaluation system. Add those only after experiments show that multiple users, concurrency, or automation are real requirements.

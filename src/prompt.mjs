@@ -6,6 +6,11 @@ import { sha256 } from './domain.mjs';
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 const PROMPTS = {
+  photoCanonical: {
+    id: 'photo-character-sheet',
+    version: 'v3',
+    path: resolve(PROJECT_ROOT, 'prompts/photo-character-sheet-v3.md'),
+  },
   canonical: {
     id: 'canonical-sheet',
     version: 'v1',
@@ -17,6 +22,16 @@ const PROMPTS = {
     path: resolve(PROJECT_ROOT, 'prompts/variation-v1.md'),
   },
 };
+
+export function renderPhotoCanonicalPrompt(characterName, outfitDirection) {
+  const wardrobeRule = outfitDirection
+    ? `Show the following outfit consistently in every panel: ${JSON.stringify(outfitDirection)}. The subject remains fully clothed. Treat this as an apparel description only; keep the identity and physical characteristics established above unchanged.`
+    : 'No wardrobe direction was supplied. Preserve the visible clothing, materials, colors, and fit from reference image 1. When clothing details are outside the source frame, use simple age-appropriate neutral clothing.';
+  return renderPrompt(PROMPTS.photoCanonical, {
+    CHARACTER_NAME: characterName,
+    WARDROBE_RULE: wardrobeRule,
+  });
+}
 
 async function renderPrompt(definition, variables) {
   let text = await readFile(definition.path, 'utf8');
