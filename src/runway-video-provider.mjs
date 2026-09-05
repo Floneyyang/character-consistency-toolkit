@@ -2,6 +2,8 @@ import { assertId, assertImage, assertMp4 } from './domain.mjs';
 
 const DEFAULT_BASE_URL = 'https://api.dev.runwayml.com/v1';
 const API_VERSION = '2024-11-06';
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 2 * 60_000;
 
 export class VideoProviderError extends Error {
   constructor(kind, message, options = {}) {
@@ -26,22 +28,51 @@ export class RunwayVideoProvider {
     model = 'gen4_turbo',
     fetchImpl = globalThis.fetch,
     baseUrl = DEFAULT_BASE_URL,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    downloadTimeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS,
   }) {
     if (!apiKey) throw new VideoProviderError('configuration', 'Runway API key is missing.');
     if (model !== 'gen4_turbo') {
       throw new VideoProviderError('configuration', 'RUNWAYML_VIDEO_MODEL must be gen4_turbo.');
     }
     if (typeof fetchImpl !== 'function') throw new Error('A fetch implementation is required.');
+    if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs <= 0) {
+      throw new Error('Runway request timeout must be positive.');
+    }
+    if (!Number.isFinite(downloadTimeoutMs) || downloadTimeoutMs <= 0) {
+      throw new Error('Runway download timeout must be positive.');
+    }
     this.apiKey = apiKey;
     this.model = model;
     this.fetch = fetchImpl;
     this.baseUrl = baseUrl;
+    this.requestTimeoutMs = requestTimeoutMs;
+    this.downloadTimeoutMs = downloadTimeoutMs;
   }
 
-  async #api(path, options = {}) {
+  async #request(url, options, { timeoutMs, mutation = false } = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response;
     try {
-      response = await this.fetch(`${this.baseUrl}${path}`, {
+      response = await this.fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+    } catch (cause) {
+      const timedOut = cause?.name === 'AbortError';
+      const kind = mutation ? 'outcome-unknown' : timedOut ? 'timeout' : 'unavailable';
+      throw new VideoProviderError(kind, 'Runway request did not complete locally.', { cause });
+    } finally {
+      clearTimeout(timeout);
+    }
+    return response;
+  }
+
+  async #api(path, options = {}, { mutation = false } = {}) {
+    const response = await this.#request(
+      `${this.baseUrl}${path}`,
+      {
         ...options,
         headers: {
           authorization: `Bearer ${this.apiKey}`,
@@ -49,12 +80,9 @@ export class RunwayVideoProvider {
           ...(options.body ? { 'content-type': 'application/json' } : {}),
           ...options.headers,
         },
-      });
-    } catch (cause) {
-      throw new VideoProviderError('outcome-unknown', 'Runway request outcome is unknown.', {
-        cause,
-      });
-    }
+      },
+      { timeoutMs: this.requestTimeoutMs, mutation },
+    );
     const text = await response.text();
     let payload = null;
     if (text) {
@@ -85,14 +113,11 @@ export class RunwayVideoProvider {
     const form = new FormData();
     for (const [key, value] of Object.entries(upload.fields)) form.append(key, String(value));
     form.append('file', new Blob([bytes], { type: mimeType }), `animation-keyframe.${extension}`);
-    let response;
-    try {
-      response = await this.fetch(upload.uploadUrl, { method: 'POST', body: form });
-    } catch (cause) {
-      throw new VideoProviderError('outcome-unknown', 'Runway upload outcome is unknown.', {
-        cause,
-      });
-    }
+    const response = await this.#request(
+      upload.uploadUrl,
+      { method: 'POST', body: form },
+      { timeoutMs: this.requestTimeoutMs },
+    );
     if (!response.ok) {
       throw new VideoProviderError('unavailable', `Runway upload failed with status ${response.status}.`);
     }
@@ -103,16 +128,20 @@ export class RunwayVideoProvider {
     const mimeType = assertImage(firstFrame, 'Animation first frame');
     const promptImage = await this.#uploadImage(firstFrame, mimeType);
     const startedAt = new Date().toISOString();
-    const task = await this.#api('/image_to_video', {
-      method: 'POST',
-      body: JSON.stringify({
-        model: this.model,
-        promptImage,
-        promptText: prompt,
-        ratio,
-        duration,
-      }),
-    });
+    const task = await this.#api(
+      '/image_to_video',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          model: this.model,
+          promptImage,
+          promptText: prompt,
+          ratio,
+          duration,
+        }),
+      },
+      { mutation: true },
+    );
     if (!task?.id) throw new VideoProviderError('unavailable', 'Runway task ID is missing.');
     return {
       taskId: task.id,
@@ -136,7 +165,16 @@ export class RunwayVideoProvider {
     return {
       status,
       outputUrl: status === 'SUCCEEDED' ? task?.output?.[0] ?? null : null,
-      failure: status === 'FAILED' ? task?.failure ?? task?.failureCode ?? null : null,
+      failureCode: status === 'FAILED' ? task?.failureCode ?? null : null,
+      failureCategory:
+        status === 'FAILED'
+          ? /^SAFETY\./.test(String(task?.failureCode ?? '')) ||
+            /moderation|safety/i.test(String(task?.failure ?? ''))
+            ? 'moderated'
+            : 'provider-failed'
+          : status === 'CANCELED'
+            ? 'canceled'
+            : null,
       completedAt: task?.updatedAt ?? task?.createdAt ?? null,
     };
   }
@@ -145,14 +183,11 @@ export class RunwayVideoProvider {
     if (typeof outputUrl !== 'string' || !outputUrl.startsWith('https://')) {
       throw new VideoProviderError('unavailable', 'Runway output URL is invalid.');
     }
-    let response;
-    try {
-      response = await this.fetch(outputUrl);
-    } catch (cause) {
-      throw new VideoProviderError('unavailable', 'Runway output could not be downloaded.', {
-        cause,
-      });
-    }
+    const response = await this.#request(
+      outputUrl,
+      {},
+      { timeoutMs: this.downloadTimeoutMs },
+    );
     if (!response.ok) {
       throw new VideoProviderError('unavailable', `Runway output download failed with status ${response.status}.`);
     }
@@ -161,7 +196,14 @@ export class RunwayVideoProvider {
       throw new VideoProviderError('unavailable', 'Runway output exceeds the local video limit.');
     }
     const bytes = Buffer.from(await response.arrayBuffer());
-    const mimeType = assertMp4(bytes, 'Runway output');
+    let mimeType;
+    try {
+      mimeType = assertMp4(bytes, 'Runway output');
+    } catch (cause) {
+      throw new VideoProviderError('unavailable', 'Runway returned an invalid video.', {
+        cause,
+      });
+    }
     return { bytes, mimeType };
   }
 }

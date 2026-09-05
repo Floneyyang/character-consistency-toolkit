@@ -97,3 +97,42 @@ test('maps authentication failures without leaking provider details', async () =
     },
   );
 });
+
+test('classifies asynchronous safety failures as moderated', async () => {
+  const provider = new RunwayVideoProvider({
+    apiKey: 'secret',
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({ status: 'FAILED', failureCode: 'SAFETY.INPUT.TEXT' }),
+        { status: 200 },
+      ),
+  });
+
+  const task = await provider.retrieve('12345678-1234-1234-1234-123456789abc');
+
+  assert.equal(task.status, 'FAILED');
+  assert.equal(task.failureCode, 'SAFETY.INPUT.TEXT');
+  assert.equal(task.failureCategory, 'moderated');
+});
+
+test('bounds status checks with a retryable timeout', async () => {
+  const provider = new RunwayVideoProvider({
+    apiKey: 'secret',
+    requestTimeoutMs: 5,
+    fetchImpl: async (_url, options) =>
+      new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          reject(new DOMException('aborted', 'AbortError'));
+        });
+      }),
+  });
+
+  await assert.rejects(
+    () => provider.retrieve('12345678-1234-1234-1234-123456789abc'),
+    (error) => {
+      assert.ok(error instanceof VideoProviderError);
+      assert.equal(error.kind, 'timeout');
+      return true;
+    },
+  );
+});

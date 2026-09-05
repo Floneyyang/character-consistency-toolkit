@@ -276,6 +276,35 @@ test('rejects an invalid animation brief before paid generation', async (t) => {
   assert.equal(context.videoProvider.calls.length, 0);
 });
 
+test('persists a failed animation attempt instead of erasing paid-work lineage', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+  const character = await context.service.createCharacterSheetFromPhoto({
+    name: 'Mina',
+    photo: PNG,
+  });
+  context.provider.generate = async () => {
+    const error = new Error('image provider failed');
+    error.kind = 'moderated';
+    throw error;
+  };
+
+  await assert.rejects(
+    () =>
+      context.service.startAnimation({
+        characterId: character.id,
+        brief: 'She turns toward camera and smiles.',
+      }),
+    /image provider failed/,
+  );
+
+  const persisted = await context.store.getCharacter(character.id);
+  assert.equal(persisted.animations.length, 1);
+  assert.equal(persisted.animations[0].status, 'FAILED');
+  assert.equal(persisted.animations[0].failureCategory, 'moderated');
+  assert.equal(context.videoProvider.calls.length, 0);
+});
+
 test('rejects an outfit direction longer than 500 characters before generation', async (t) => {
   const context = await fixture();
   t.after(() => rm(context.directory, { recursive: true, force: true }));

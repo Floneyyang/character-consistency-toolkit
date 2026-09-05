@@ -230,6 +230,24 @@ export class CharacterConsistencyService {
       manifest.identity.canonicalSheet.path,
     );
     const animationId = createId('animation');
+    const createdAt = this.clock().toISOString();
+    const animation = {
+      id: animationId,
+      brief: animationBrief,
+      status: 'CREATING_FRAME',
+      createdAt,
+      updatedAt: createdAt,
+      firstFrame: null,
+      video: null,
+      failureCategory: null,
+    };
+    manifest.animations ??= [];
+    manifest.animations.push(animation);
+    manifest.updatedAt = createdAt;
+    await this.store.writeManifest(manifest);
+
+    let videoSubmissionStarted = false;
+    let videoTaskCreated = false;
     try {
       const keyframePrompt = await renderAnimationKeyframePrompt(
         manifest.name,
@@ -252,58 +270,68 @@ export class CharacterConsistencyService {
         `assets/animations/${animationId}/first-frame.png`,
         keyframeResult.bytes,
       );
+      animation.firstFrame = {
+        asset: keyframe,
+        generation: {
+          prompt: keyframePrompt,
+          references: [
+            {
+              role: 'canonical-sheet',
+              mimeType: canonical.mimeType,
+              sha256: manifest.identity.canonicalSheet.sha256,
+            },
+          ],
+          ...keyframeResult.provenance,
+        },
+      };
+      animation.status = 'SUBMITTING';
+      animation.updatedAt = this.clock().toISOString();
+      manifest.updatedAt = animation.updatedAt;
+      await this.store.writeManifest(manifest);
+
       const motionPrompt = await renderAnimationMotionPrompt(animationBrief);
+      videoSubmissionStarted = true;
       const videoTask = await this.videoProvider.create({
         firstFrame: keyframeResult.bytes,
         prompt: motionPrompt.text,
         ratio: '1280:720',
         duration: 5,
       });
+      videoTaskCreated = true;
       const now = this.clock().toISOString();
-      const animation = {
-        id: animationId,
-        brief: animationBrief,
-        status: 'PENDING',
-        createdAt: now,
-        updatedAt: now,
-        firstFrame: {
-          asset: keyframe,
-          generation: {
-            prompt: keyframePrompt,
-            references: [
-              {
-                role: 'canonical-sheet',
-                mimeType: canonical.mimeType,
-                sha256: manifest.identity.canonicalSheet.sha256,
-              },
-            ],
-            ...keyframeResult.provenance,
-          },
+      animation.status = 'PENDING';
+      animation.updatedAt = now;
+      animation.video = {
+        taskId: videoTask.taskId,
+        generation: {
+          prompt: motionPrompt,
+          references: [
+            {
+              role: 'animation-first-frame',
+              mimeType: keyframe.mimeType,
+              sha256: keyframe.sha256,
+            },
+          ],
+          ...videoTask.provenance,
         },
-        video: {
-          taskId: videoTask.taskId,
-          generation: {
-            prompt: motionPrompt,
-            references: [
-              {
-                role: 'animation-first-frame',
-                mimeType: keyframe.mimeType,
-                sha256: keyframe.sha256,
-              },
-            ],
-            ...videoTask.provenance,
-          },
-          asset: null,
-          failure: null,
-        },
+        asset: null,
+        failureCode: null,
+        failureCategory: null,
       };
-      manifest.animations ??= [];
-      manifest.animations.push(animation);
       manifest.updatedAt = now;
       await this.store.writeManifest(manifest);
       return animation;
     } catch (error) {
-      await this.store.deleteAnimation(characterId, animationId).catch(() => {});
+      const outcomeUnknown =
+        error?.kind === 'outcome-unknown' ||
+        (videoSubmissionStarted && videoTaskCreated);
+      animation.status = outcomeUnknown ? 'OUTCOME_UNKNOWN' : 'FAILED';
+      animation.failureCategory = outcomeUnknown
+        ? 'outcome-unknown'
+        : error?.kind ?? 'generation-failed';
+      animation.updatedAt = this.clock().toISOString();
+      manifest.updatedAt = animation.updatedAt;
+      await this.store.writeManifest(manifest).catch(() => {});
       throw error;
     }
   }
@@ -318,7 +346,13 @@ export class CharacterConsistencyService {
       error.code = 'ENOENT';
       throw error;
     }
-    if (['SUCCEEDED', 'FAILED', 'CANCELED'].includes(animation.status)) return animation;
+    if (
+      ['SUCCEEDED', 'FAILED', 'CANCELED', 'OUTCOME_UNKNOWN', 'CREATING_FRAME', 'SUBMITTING'].includes(
+        animation.status,
+      )
+    ) {
+      return animation;
+    }
     if (!this.videoProvider) throw new Error('Animation providers are not configured.');
 
     const task = await this.videoProvider.retrieve(animation.video.taskId);
@@ -336,7 +370,9 @@ export class CharacterConsistencyService {
       animation.video.asset = asset;
       animation.video.generation.completedAt = task.completedAt ?? now;
     } else if (task.status === 'FAILED' || task.status === 'CANCELED') {
-      animation.video.failure = task.failure ? String(task.failure).slice(0, 500) : null;
+      animation.video.failureCode = task.failureCode;
+      animation.video.failureCategory = task.failureCategory;
+      animation.failureCategory = task.failureCategory;
     }
     manifest.updatedAt = now;
     try {

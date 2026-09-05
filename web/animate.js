@@ -22,6 +22,8 @@ let providerReady = false;
 let characterReady = false;
 let activeAnimationId = null;
 let pollTimer = null;
+let retryMode = 'new';
+let submissionsBlocked = false;
 
 function setStage(state) {
   emptyState.hidden = state !== 'empty';
@@ -31,28 +33,38 @@ function setStage(state) {
 }
 
 function syncButton() {
-  animateButton.disabled = !providerReady || !characterReady || directionInput.value.trim().length < 3;
+  animateButton.disabled =
+    submissionsBlocked || !providerReady || !characterReady || directionInput.value.trim().length < 3;
 }
 
-function showError(message) {
+function showError(message, { mode = 'new' } = {}) {
   if (pollTimer) window.clearTimeout(pollTimer);
   pollTimer = null;
   errorMessage.textContent = message;
+  retryMode = mode;
+  submissionsBlocked = mode !== 'new';
+  retry.hidden = mode === 'blocked';
+  retry.textContent = mode === 'poll' ? 'Check status again' : 'Create a new attempt';
   setStage('error');
   syncButton();
 }
 
 async function responseJson(response) {
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error?.message || 'The request failed.');
+  if (!response.ok) {
+    const error = new Error(payload?.error?.message || 'The request failed.');
+    error.code = payload?.error?.code;
+    throw error;
+  }
   return payload;
 }
 
 function renderAnimation(animation) {
   activeAnimationId = animation.id;
-  firstFrame.src = animation.firstFrameUrl;
+  if (animation.firstFrameUrl) firstFrame.src = animation.firstFrameUrl;
   resultState.hidden = false;
   if (animation.status === 'SUCCEEDED' && animation.videoUrl) {
+    submissionsBlocked = false;
     video.src = animation.videoUrl;
     video.hidden = false;
     download.href = animation.videoUrl;
@@ -63,11 +75,25 @@ function renderAnimation(animation) {
     return true;
   }
   if (animation.status === 'FAILED' || animation.status === 'CANCELED') {
-    showError('Runway could not complete this animation. The failed task was preserved and was not retried.');
+    const moderated = animation.failureCategory === 'moderated';
+    showError(
+      moderated
+        ? 'Runway blocked this animation for safety. The task was preserved and should not be retried unchanged.'
+        : 'Runway could not complete this animation. The failed task was preserved and was not retried.',
+      { mode: moderated ? 'blocked' : 'new' },
+    );
+    return true;
+  }
+  if (['OUTCOME_UNKNOWN', 'CREATING_FRAME', 'SUBMITTING'].includes(animation.status)) {
+    showError(
+      'This attempt did not reach a confirmed provider state. It was preserved to prevent an accidental duplicate charge.',
+      { mode: 'blocked' },
+    );
     return true;
   }
   video.hidden = true;
   download.hidden = true;
+  submissionsBlocked = true;
   loadingTitle.textContent = 'Animating your character…';
   loadingCopy.textContent = 'Runway is rendering the five-second scene. This page checks the saved task without submitting another charge.';
   setStage('loading');
@@ -85,7 +111,9 @@ async function pollAnimation() {
       pollTimer = window.setTimeout(pollAnimation, 5_000 + Math.floor(Math.random() * 1_000));
     }
   } catch (error) {
-    showError(error instanceof Error ? error.message : 'Animation status could not be checked.');
+    showError(error instanceof Error ? error.message : 'Animation status could not be checked.', {
+      mode: 'poll',
+    });
   }
 }
 
@@ -108,7 +136,9 @@ async function startAnimation(event) {
     renderAnimation(animation);
     await pollAnimation();
   } catch (error) {
-    showError(error instanceof Error ? error.message : 'Animation generation failed.');
+    showError(error instanceof Error ? error.message : 'Animation generation failed.', {
+      mode: error?.code === 'OUTCOME_UNKNOWN' ? 'blocked' : 'new',
+    });
   }
 }
 
@@ -147,7 +177,17 @@ async function initialize() {
 
 directionInput.addEventListener('input', syncButton);
 form.addEventListener('submit', startAnimation);
-retry.addEventListener('click', () => setStage('empty'));
+retry.addEventListener('click', () => {
+  if (retryMode === 'poll') {
+    setStage('loading');
+    void pollAnimation();
+    return;
+  }
+  activeAnimationId = null;
+  submissionsBlocked = false;
+  setStage('empty');
+  syncButton();
+});
 window.addEventListener('beforeunload', () => {
   if (pollTimer) window.clearTimeout(pollTimer);
 });

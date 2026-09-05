@@ -77,6 +77,9 @@ function publicGenerationError(error) {
     if (error.kind === 'moderated') {
       return new HttpError(422, 'INPUT_REJECTED', 'The image provider rejected this input.');
     }
+    if (error.kind === 'outcome-unknown') {
+      return new HttpError(503, 'OUTCOME_UNKNOWN', 'The image provider did not confirm the request outcome. Do not retry yet.');
+    }
     if (error.kind === 'invalid-reference' || error.kind === 'invalid-request') {
       return new HttpError(422, 'INVALID_INPUT', 'The image provider could not use this image.');
     }
@@ -98,6 +101,9 @@ function publicGenerationError(error) {
     if (error.kind === 'outcome-unknown') {
       return new HttpError(503, 'OUTCOME_UNKNOWN', 'The video provider did not confirm the task outcome. Do not retry yet.');
     }
+    if (error.kind === 'timeout') {
+      return new HttpError(504, 'ANIMATION_TIMEOUT', 'The video provider took too long to respond. Check the saved task again.');
+    }
     return new HttpError(503, 'ANIMATION_UNAVAILABLE', 'Video generation is currently unavailable.');
   }
   if (error?.code === 'ENOENT') {
@@ -117,11 +123,14 @@ function publicAnimation(animation, characterId) {
     id: animation.id,
     brief: animation.brief,
     status: animation.status,
-    firstFrameUrl: `/api/characters/${encodeURIComponent(characterId)}/animations/${encodeURIComponent(animation.id)}/first-frame`,
+    firstFrameUrl: animation.firstFrame
+      ? `/api/characters/${encodeURIComponent(characterId)}/animations/${encodeURIComponent(animation.id)}/first-frame`
+      : null,
     videoUrl:
-      animation.status === 'SUCCEEDED' && animation.video.asset
+      animation.status === 'SUCCEEDED' && animation.video?.asset
         ? `/api/characters/${encodeURIComponent(characterId)}/animations/${encodeURIComponent(animation.id)}/video`
         : null,
+    failureCategory: animation.failureCategory ?? animation.video?.failureCategory ?? null,
   };
 }
 
