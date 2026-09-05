@@ -19,6 +19,7 @@ const loadingTitle = document.querySelector('#loading-title');
 const resultState = document.querySelector('#result-state');
 const resultImage = document.querySelector('#result-image');
 const downloadLink = document.querySelector('#download-link');
+const animateLink = document.querySelector('#animate-link');
 const startOverButton = document.querySelector('#start-over');
 const errorState = document.querySelector('#error-state');
 const errorMessage = document.querySelector('#error-message');
@@ -146,6 +147,7 @@ async function createCharacterSheet(event) {
     resultImage.src = character.imageUrl;
     resultImage.alt = `${character.name} canonical three-view character sheet`;
     downloadLink.href = character.imageUrl;
+    animateLink.href = `/animate.html?character=${encodeURIComponent(character.id)}`;
     const safeName = character.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     downloadLink.download = `${safeName || 'character'}-sheet.png`;
     setOutputState('result');

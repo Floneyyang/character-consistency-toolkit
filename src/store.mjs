@@ -11,6 +11,7 @@ import {
   assertCharacterManifest,
   assertId,
   assertImage,
+  assertMp4,
   extensionForMimeType,
   sha256,
 } from './domain.mjs';
@@ -89,6 +90,35 @@ export class FileCharacterStore {
   async deleteImage(characterId, relativePath) {
     const safePath = assertSafeRelativePath(relativePath);
     await rm(join(this.characterDirectory(characterId), safePath), { force: false });
+  }
+
+  async writeVideo(characterId, relativePath, bytes) {
+    const mimeType = assertMp4(bytes);
+    const safePath = assertSafeRelativePath(relativePath);
+    const absolutePath = join(this.characterDirectory(characterId), safePath);
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, bytes, { flag: 'wx' });
+    return {
+      path: safePath,
+      mimeType,
+      bytes: bytes.length,
+      sha256: sha256(bytes),
+    };
+  }
+
+  async readVideo(characterId, relativePath) {
+    const safePath = assertSafeRelativePath(relativePath);
+    const bytes = await readFile(join(this.characterDirectory(characterId), safePath));
+    const mimeType = assertMp4(bytes);
+    return { bytes, mimeType };
+  }
+
+  async deleteAnimation(characterId, animationId) {
+    assertId(animationId, 'Animation ID');
+    await rm(join(this.characterDirectory(characterId), 'assets', 'animations', animationId), {
+      recursive: true,
+      force: true,
+    });
   }
 
   async writeManifest(manifest) {

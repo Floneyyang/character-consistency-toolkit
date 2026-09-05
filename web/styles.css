@@ -162,7 +162,7 @@ h1 {
   background: white;
   outline: none;
 }
-#outfit-direction {
+#outfit-direction, #animation-direction {
   width: 100%;
   min-height: 92px;
   padding: 13px 15px;
@@ -174,7 +174,7 @@ h1 {
   outline: none;
   line-height: 1.5;
 }
-#character-name:focus, #outfit-direction:focus { border-color: var(--rose); box-shadow: 0 0 0 3px rgba(206, 63, 120, 0.12); }
+#character-name:focus, #outfit-direction:focus, #animation-direction:focus { border-color: var(--rose); box-shadow: 0 0 0 3px rgba(206, 63, 120, 0.12); }
 .field-help { margin: 7px 2px 20px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 
 .drop-zone {
@@ -277,9 +277,29 @@ h1 {
 .result-heading .eyebrow { margin-bottom: 6px; }
 .result-heading h2 { margin-bottom: 0; }
 .result-state > img { width: 100%; max-height: 650px; display: block; border-radius: 18px; background: #eee9ed; object-fit: contain; }
-.download-button { width: auto; margin: 18px 6px 0; padding: 0 24px; float: right; }
+.result-actions { margin: 18px 6px 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.result-actions .primary-button { width: auto; margin: 0; padding: 0 24px; }
+.result-actions .secondary-button { padding: 0 20px; }
 .error-state > span { width: 52px; height: 52px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 50%; color: var(--rose-dark); background: var(--rose-soft); font-family: Georgia, serif; font-size: 25px; font-weight: 700; }
 .error-state .secondary-button { margin-top: 12px; }
+
+.animation-hero { padding-bottom: 40px; }
+.animation-workspace { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+.identity-card { padding: 24px; align-self: start; }
+.identity-card img { width: 100%; display: block; border-radius: 18px; background: #eee9ed; }
+.identity-card h2 { margin: 18px 4px 5px; font-family: Georgia, serif; font-size: 25px; font-weight: 500; }
+.identity-card p { margin: 0 4px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.animation-card { min-height: 620px; padding: clamp(24px, 4vw, 42px); }
+.animation-card form { margin-top: 26px; }
+.animation-cost { margin: 10px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.animation-stage { margin-top: 28px; min-height: 280px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,0.58); overflow: hidden; }
+.animation-stage .loading-state, .animation-stage .error-state { padding: 32px; }
+.animation-result { width: 100%; padding: 16px; }
+.animation-result img, .animation-result video { width: 100%; display: block; border-radius: 14px; background: #16131b; }
+.animation-result video { margin-top: 12px; }
+.animation-result .primary-button { width: auto; padding: 0 24px; }
+.back-link { color: var(--rose-dark); font-size: 13px; font-weight: 750; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
 
 footer { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 0 0 34px; color: var(--muted); font-size: 12px; }
 

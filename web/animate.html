@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Create a short animation from a canonical character sheet." />
+    <title>Bring Your Character to Life — Character Consistency Lab</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Character Consistency Lab home">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span>Character Consistency Lab</span>
+      </a>
+      <span class="local-badge">Local workspace</span>
+    </header>
+
+    <main>
+      <section class="hero animation-hero" aria-labelledby="page-title">
+        <p class="eyebrow">From identity to motion</p>
+        <h1 id="page-title">Bring your character to life.</h1>
+        <p class="hero-copy">Describe one small cinematic moment. Your canonical sheet remains the identity authority.</p>
+      </section>
+
+      <section class="workspace animation-workspace" aria-label="Character animation workspace">
+        <section class="creator-card identity-card" aria-labelledby="identity-title">
+          <a class="back-link" href="/">← Create another sheet</a>
+          <img id="canonical-image" alt="Canonical character sheet" />
+          <h2 id="identity-title">Loading character…</h2>
+          <p>The sheet—not the original photo—guides the character's face, proportions, hair, and visual style.</p>
+        </section>
+
+        <section class="output-card animation-card">
+          <div>
+            <div class="section-heading">
+              <span class="section-number" aria-hidden="true">02</span>
+              <div>
+                <h2>Direct a five-second moment</h2>
+                <p>Keep the action focused so the character stays recognizable.</p>
+              </div>
+            </div>
+
+            <form id="animation-form">
+              <label class="field-label" for="animation-direction">Scene and movement</label>
+              <textarea
+                id="animation-direction"
+                maxlength="500"
+                rows="4"
+                required
+                placeholder="Example: On a neon rooftop at dusk, she turns toward camera, smiles, and her coat moves gently in the wind."
+              ></textarea>
+              <p class="field-help">One character, one continuous shot, and subtle movement usually preserve identity best.</p>
+              <div id="animation-configuration-note" class="notice" hidden role="status">
+                Add <code>RUNWAYML_API_SECRET</code> to your local <code>.env</code> file before animating.
+              </div>
+              <button id="animate-button" class="primary-button" type="submit" disabled>
+                Create animation
+                <span aria-hidden="true">→</span>
+              </button>
+              <p class="animation-cost">This creates one GPT Image first frame, then a five-second Runway Gen-4 Turbo video (about $0.25 for the video portion).</p>
+            </form>
+
+            <div id="animation-stage" class="animation-stage">
+              <div id="animation-empty" class="empty-state">
+                <p>Your first frame and finished animation will appear here.</p>
+              </div>
+              <div id="animation-loading" class="loading-state" hidden aria-live="polite">
+                <span class="spinner" aria-hidden="true"></span>
+                <h2 id="animation-loading-title">Creating an identity-locked first frame…</h2>
+                <p id="animation-loading-copy">Keep this page open while the task is submitted.</p>
+              </div>
+              <div id="animation-result" class="animation-result" hidden>
+                <img id="first-frame" alt="Identity-locked animation first frame" />
+                <video id="animation-video" controls playsinline hidden></video>
+                <a id="video-download" class="primary-button" download hidden>Download animation ↓</a>
+              </div>
+              <div id="animation-error" class="error-state" hidden role="alert">
+                <span aria-hidden="true">!</span>
+                <h2>We couldn't create the animation.</h2>
+                <p id="animation-error-message"></p>
+                <button id="animation-retry" class="secondary-button" type="button">Try again</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer><p>A small, provenance-first experiment in visual character continuity.</p></footer>
+    <script type="module" src="/animate.js"></script>
+  </body>
+</html>

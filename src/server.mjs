@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpenAIImageProvider } from './openai-image-provider.mjs';
+import { RunwayVideoProvider } from './runway-video-provider.mjs';
 import { CharacterConsistencyService } from './service.mjs';
 import { FileCharacterStore } from './store.mjs';
 import { createWebApp } from './web-app.mjs';
@@ -23,10 +24,18 @@ const imageProvider = providerConfigured
       quality: process.env.OPENAI_IMAGE_QUALITY,
     })
   : null;
-const service = new CharacterConsistencyService({ store, imageProvider });
+const videoProviderConfigured = Boolean(process.env.RUNWAYML_API_SECRET);
+const videoProvider = videoProviderConfigured
+  ? new RunwayVideoProvider({
+      apiKey: process.env.RUNWAYML_API_SECRET,
+      model: process.env.RUNWAYML_VIDEO_MODEL,
+    })
+  : null;
+const service = new CharacterConsistencyService({ store, imageProvider, videoProvider });
 const handler = createWebApp({
   service,
   providerConfigured,
+  videoProviderConfigured,
   webDirectory: resolve(PROJECT_ROOT, 'web'),
 });
 const server = createServer((request, response) => {
@@ -37,6 +46,9 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`Character Consistency Lab: http://127.0.0.1:${port}`);
   if (!providerConfigured) {
     console.log('Generation is disabled until OPENAI_API_KEY is added to .env.');
+  }
+  if (!videoProviderConfigured) {
+    console.log('Animation is disabled until RUNWAYML_API_SECRET is added to .env.');
   }
 });
 

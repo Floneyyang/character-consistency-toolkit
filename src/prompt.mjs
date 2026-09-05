@@ -21,6 +21,16 @@ const PROMPTS = {
     version: 'v1',
     path: resolve(PROJECT_ROOT, 'prompts/variation-v1.md'),
   },
+  animationKeyframe: {
+    id: 'animation-keyframe',
+    version: 'v1',
+    path: resolve(PROJECT_ROOT, 'prompts/animation-keyframe-v1.md'),
+  },
+  animationMotion: {
+    id: 'animation-motion',
+    version: 'v1',
+    path: resolve(PROJECT_ROOT, 'prompts/animation-motion-v1.md'),
+  },
 };
 
 export function renderPhotoCanonicalPrompt(characterName, outfitDirection) {
@@ -65,5 +75,18 @@ export function renderVariationPrompt(characterName, brief) {
   return renderPrompt(PROMPTS.variation, {
     CHARACTER_NAME: characterName,
     VARIATION_BRIEF: brief,
+  });
+}
+
+export function renderAnimationKeyframePrompt(characterName, brief) {
+  return renderPrompt(PROMPTS.animationKeyframe, {
+    CHARACTER_NAME: characterName,
+    SCENE_BRIEF: brief,
+  });
+}
+
+export function renderAnimationMotionPrompt(brief) {
+  return renderPrompt(PROMPTS.animationMotion, {
+    MOTION_BRIEF: brief,
   });
 }

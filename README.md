@@ -15,6 +15,7 @@ It turns one creator-approved character image—and optionally one supporting so
 - A small command-line interface
 - A localhost drag-and-drop website for creating a sheet from one image
 - One real provider adapter: OpenAI GPT Image 2
+- One server-side video adapter: Runway Gen-4 Turbo
 - Tests that use a fake provider and make no paid API calls
 
 It intentionally does **not** include user accounts, a database, background queues, cloud storage, automatic retries, face recognition, or a dependency on Floney's Doll Factory.
@@ -23,6 +24,7 @@ It intentionally does **not** include user accounts, a database, background queu
 
 - Node.js 22 or newer
 - An OpenAI API key with GPT Image access
+- A Runway API key for animation (character-sheet generation still works without it)
 
 The implementation uses the Image API's edits endpoint because the workflow generates new images from one or more ordered image references. See OpenAI's [image generation guide](https://developers.openai.com/api/docs/guides/image-generation) and [GPT Image 2 model page](https://developers.openai.com/api/docs/models/gpt-image-2).
 
@@ -36,6 +38,7 @@ Add your key to `.env`:
 
 ```dotenv
 OPENAI_API_KEY=your_key_here
+RUNWAYML_API_SECRET=your_runway_key_here
 ```
 
 The `.env` file and all generated `data/` are ignored by Git.
@@ -56,8 +59,11 @@ Then open [http://127.0.0.1:4173](http://127.0.0.1:4173). The personal workflow 
 4. Select **Create character sheet**.
 5. Keep the page open while GPT Image creates the three coordinated views.
 6. Review and download the canonical sheet.
+7. Select **Bring this character to life**, describe one short moment, and create a five-second animation.
 
 The photo remains authoritative for identity, hair, apparent age, body profile, and proportions. The optional text direction controls clothing, footwear, and wearable accessories only.
+
+Animation is a two-provider workflow: GPT Image derives one 16:9 first frame from the canonical sheet, then Runway animates that frame. The sheet remains the sole visual identity authority. The app saves Runway's completed MP4 locally because provider output URLs expire. The default five-second Gen-4 Turbo video costs approximately $0.25 at Runway's current published API pricing, before the separate first-frame image cost and tax.
 
 The site binds only to `127.0.0.1`. The API key stays in the Node process and is never sent to browser code. Source images, generated sheets, manifests, and provenance are stored in the Git-ignored local `data/` folder. A live generation uses paid provider capacity; automated tests never call the provider.
 
@@ -117,6 +123,7 @@ Pull requests and pushes to `main` run the same check on Node.js 22 in GitHub Ac
 
 - It assumes one local writer at a time.
 - Generation is synchronous and may take several minutes.
+- Animation submission waits for its GPT Image first frame; the Runway video task is asynchronous and resumes when its workspace is reopened.
 - Closing or refreshing the page does not cancel an in-flight provider request.
 - It does not automatically retry billable requests with unknown outcomes.
 - Evaluation is currently human review, not an automated identity score.
@@ -127,3 +134,4 @@ Pull requests and pushes to `main` run the same check on Node.js 22 in GitHub Ac
 
 - [Architecture](docs/architecture.md) summarizes the current modules, data flow, and persistence model.
 - [Development design](docs/dev-design.md) documents the governing invariants, Mermaid diagrams, three primary security decisions, reproducibility strategy, failure semantics, and public-production gates.
+- [Product roadmap](docs/roadmap.md) records completed milestones and the approved Runway animation experiment.
