@@ -46,6 +46,7 @@ Scope:
 - Add a dedicated animation workspace linked from a completed character sheet.
 - Generate one landscape first frame from the canonical sheet; do not send the three-panel sheet directly to video generation.
 - Treat the canonical sheet as the only visual identity authority for the first frame.
+- Treat the canonical sheet as the only wardrobe authority; animation direction may change the scene and movement but never the approved outfit.
 - Use Runway behind a server-side video-provider interface.
 - Persist the exact motion brief, prompt revisions and hashes, model parameters, provider task ID, first frame, and downloaded MP4.
 - Poll asynchronous Runway tasks without exposing the API key or Runway's temporary output URL.

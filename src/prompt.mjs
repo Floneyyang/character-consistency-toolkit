@@ -23,13 +23,13 @@ const PROMPTS = {
   },
   animationKeyframe: {
     id: 'animation-keyframe',
-    version: 'v1',
-    path: resolve(PROJECT_ROOT, 'prompts/animation-keyframe-v1.md'),
+    version: 'v2',
+    path: resolve(PROJECT_ROOT, 'prompts/animation-keyframe-v2.md'),
   },
   animationMotion: {
     id: 'animation-motion',
-    version: 'v1',
-    path: resolve(PROJECT_ROOT, 'prompts/animation-motion-v1.md'),
+    version: 'v2',
+    path: resolve(PROJECT_ROOT, 'prompts/animation-motion-v2.md'),
   },
 };
 
@@ -81,12 +81,12 @@ export function renderVariationPrompt(characterName, brief) {
 export function renderAnimationKeyframePrompt(characterName, brief) {
   return renderPrompt(PROMPTS.animationKeyframe, {
     CHARACTER_NAME: characterName,
-    SCENE_BRIEF: brief,
+    SCENE_BRIEF: JSON.stringify(brief),
   });
 }
 
 export function renderAnimationMotionPrompt(brief) {
   return renderPrompt(PROMPTS.animationMotion, {
-    MOTION_BRIEF: brief,
+    MOTION_BRIEF: JSON.stringify(brief),
   });
 }

@@ -238,10 +238,16 @@ test('creates and completes an animation derived only from the canonical sheet',
   );
   assert.equal(context.provider.calls[1].size, '1536x1024');
   assert.match(context.provider.calls[1].prompt, /exactly one character/);
+  assert.match(context.provider.calls[1].prompt, /sole wardrobe authority/);
+  assert.match(context.provider.calls[1].prompt, /retain the canonical outfit unchanged/);
   assert.equal(context.videoProvider.calls.length, 1);
   assert.equal(context.videoProvider.calls[0].duration, 5);
   assert.equal(context.videoProvider.calls[0].ratio, '1280:720');
   assert.match(context.videoProvider.calls[0].prompt, /turns toward camera/);
+  assert.match(context.videoProvider.calls[0].prompt, /first frame is the sole authority/);
+  assert.match(context.videoProvider.calls[0].prompt, /Do not replace, restyle, simplify, recolor/);
+  assert.equal(animation.firstFrame.generation.prompt.version, 'v2');
+  assert.equal(animation.video.generation.prompt.version, 'v2');
 
   context.videoProvider.status = 'SUCCEEDED';
   const completed = await context.service.refreshAnimation({

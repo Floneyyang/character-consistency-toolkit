@@ -239,6 +239,8 @@ These are extension paths, not current scaffolding. The project should add them 
 
 Milestone 0.4 adds cinematic image-to-video as a derived-asset workflow. The canonical sheet remains the identity authority, but it is not itself a suitable first frame because it contains three figures in one horizontal composition. The service therefore derives one immutable landscape first frame from the sheet before starting a video task.
 
+The sheet also owns wardrobe continuity. Creator animation text is subordinate and may direct setting, lighting, camera, pose, action, expression, and environmental movement only. It cannot replace, restyle, recolor, add, or remove the canonical outfit or wearable accessories. Both the first-frame and motion prompt enforce this rule so wardrobe cannot drift at either provider boundary.
+
 ```mermaid
 flowchart LR
     Sheet[Canonical sheet]
