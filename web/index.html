@@ -130,10 +130,16 @@
               <button id="start-over" class="text-button" type="button">Start over</button>
             </div>
             <img id="result-image" alt="Generated three-view character sheet" />
-            <a id="download-link" class="primary-button download-button" download>
-              Download sheet
-              <span aria-hidden="true">↓</span>
-            </a>
+            <div class="result-actions">
+              <a id="animate-link" class="primary-button" href="/animate.html">
+                Bring this character to life
+                <span aria-hidden="true">→</span>
+              </a>
+              <a id="download-link" class="secondary-button" download>
+                Download sheet
+                <span aria-hidden="true">↓</span>
+              </a>
+            </div>
           </div>
 
           <div id="error-state" class="error-state" hidden role="alert">

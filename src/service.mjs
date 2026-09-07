@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import {
   assertCharacterName,
+  assertAnimationBrief,
   assertId,
   assertOutfitDirection,
   assertVariationBrief,
@@ -8,6 +9,8 @@ import {
 } from './domain.mjs';
 import {
   renderCanonicalPrompt,
+  renderAnimationKeyframePrompt,
+  renderAnimationMotionPrompt,
   renderPhotoCanonicalPrompt,
   renderVariationPrompt,
 } from './prompt.mjs';
@@ -18,9 +21,10 @@ function publicAsset(asset) {
 }
 
 export class CharacterConsistencyService {
-  constructor({ store, imageProvider, clock = () => new Date() }) {
+  constructor({ store, imageProvider, videoProvider = null, clock = () => new Date() }) {
     this.store = store;
     this.imageProvider = imageProvider;
+    this.videoProvider = videoProvider;
     this.clock = clock;
   }
 
@@ -147,6 +151,7 @@ export class CharacterConsistencyService {
           },
         },
         variations: [],
+        animations: [],
       };
       await this.store.writeManifest(manifest);
       return manifest;
@@ -213,6 +218,174 @@ export class CharacterConsistencyService {
     return variation;
   }
 
+  async startAnimation({ characterId, brief }) {
+    assertId(characterId, 'Character ID');
+    const animationBrief = assertAnimationBrief(brief);
+    if (!this.imageProvider || !this.videoProvider) {
+      throw new Error('Animation providers are not configured.');
+    }
+    const manifest = await this.store.getCharacter(characterId);
+    const canonical = await this.store.readImage(
+      characterId,
+      manifest.identity.canonicalSheet.path,
+    );
+    const animationId = createId('animation');
+    const createdAt = this.clock().toISOString();
+    const animation = {
+      id: animationId,
+      brief: animationBrief,
+      status: 'CREATING_FRAME',
+      createdAt,
+      updatedAt: createdAt,
+      firstFrame: null,
+      video: null,
+      failureCategory: null,
+    };
+    manifest.animations ??= [];
+    manifest.animations.push(animation);
+    manifest.updatedAt = createdAt;
+    await this.store.writeManifest(manifest);
+
+    let videoSubmissionStarted = false;
+    let videoTaskCreated = false;
+    try {
+      const keyframePrompt = await renderAnimationKeyframePrompt(
+        manifest.name,
+        animationBrief,
+      );
+      const keyframeResult = await this.imageProvider.generate({
+        prompt: keyframePrompt.text,
+        references: [
+          {
+            role: 'canonical-sheet',
+            bytes: canonical.bytes,
+            mimeType: canonical.mimeType,
+            sha256: manifest.identity.canonicalSheet.sha256,
+          },
+        ],
+        size: '1536x1024',
+      });
+      const keyframe = await this.store.writeImage(
+        characterId,
+        `assets/animations/${animationId}/first-frame.png`,
+        keyframeResult.bytes,
+      );
+      animation.firstFrame = {
+        asset: keyframe,
+        generation: {
+          prompt: keyframePrompt,
+          references: [
+            {
+              role: 'canonical-sheet',
+              mimeType: canonical.mimeType,
+              sha256: manifest.identity.canonicalSheet.sha256,
+            },
+          ],
+          ...keyframeResult.provenance,
+        },
+      };
+      animation.status = 'SUBMITTING';
+      animation.updatedAt = this.clock().toISOString();
+      manifest.updatedAt = animation.updatedAt;
+      await this.store.writeManifest(manifest);
+
+      const motionPrompt = await renderAnimationMotionPrompt(animationBrief);
+      videoSubmissionStarted = true;
+      const videoTask = await this.videoProvider.create({
+        firstFrame: keyframeResult.bytes,
+        prompt: motionPrompt.text,
+        ratio: '1280:720',
+        duration: 5,
+      });
+      videoTaskCreated = true;
+      const now = this.clock().toISOString();
+      animation.status = 'PENDING';
+      animation.updatedAt = now;
+      animation.video = {
+        taskId: videoTask.taskId,
+        generation: {
+          prompt: motionPrompt,
+          references: [
+            {
+              role: 'animation-first-frame',
+              mimeType: keyframe.mimeType,
+              sha256: keyframe.sha256,
+            },
+          ],
+          ...videoTask.provenance,
+        },
+        asset: null,
+        failureCode: null,
+        failureCategory: null,
+      };
+      manifest.updatedAt = now;
+      await this.store.writeManifest(manifest);
+      return animation;
+    } catch (error) {
+      const outcomeUnknown =
+        error?.kind === 'outcome-unknown' ||
+        (videoSubmissionStarted && videoTaskCreated);
+      animation.status = outcomeUnknown ? 'OUTCOME_UNKNOWN' : 'FAILED';
+      animation.failureCategory = outcomeUnknown
+        ? 'outcome-unknown'
+        : error?.kind ?? 'generation-failed';
+      animation.updatedAt = this.clock().toISOString();
+      manifest.updatedAt = animation.updatedAt;
+      await this.store.writeManifest(manifest).catch(() => {});
+      throw error;
+    }
+  }
+
+  async refreshAnimation({ characterId, animationId }) {
+    assertId(characterId, 'Character ID');
+    assertId(animationId, 'Animation ID');
+    const manifest = await this.store.getCharacter(characterId);
+    const animation = manifest.animations?.find((item) => item.id === animationId);
+    if (!animation) {
+      const error = new Error('Animation was not found.');
+      error.code = 'ENOENT';
+      throw error;
+    }
+    if (
+      ['SUCCEEDED', 'FAILED', 'CANCELED', 'OUTCOME_UNKNOWN', 'CREATING_FRAME', 'SUBMITTING'].includes(
+        animation.status,
+      )
+    ) {
+      return animation;
+    }
+    if (!this.videoProvider) throw new Error('Animation providers are not configured.');
+
+    const task = await this.videoProvider.retrieve(animation.video.taskId);
+    const now = this.clock().toISOString();
+    animation.status = task.status;
+    animation.updatedAt = now;
+    if (task.status === 'SUCCEEDED') {
+      if (!task.outputUrl) throw new Error('Completed animation output is missing.');
+      const result = await this.videoProvider.download(task.outputUrl);
+      const asset = await this.store.writeVideo(
+        characterId,
+        `assets/animations/${animationId}/animation.mp4`,
+        result.bytes,
+      );
+      animation.video.asset = asset;
+      animation.video.generation.completedAt = task.completedAt ?? now;
+    } else if (task.status === 'FAILED' || task.status === 'CANCELED') {
+      animation.video.failureCode = task.failureCode;
+      animation.video.failureCategory = task.failureCategory;
+      animation.failureCategory = task.failureCategory;
+    }
+    manifest.updatedAt = now;
+    try {
+      await this.store.writeManifest(manifest);
+    } catch (error) {
+      if (animation.video.asset) {
+        await this.store.deleteImage(characterId, animation.video.asset.path).catch(() => {});
+      }
+      throw error;
+    }
+    return animation;
+  }
+
   getCharacter(characterId) {
     return this.store.getCharacter(characterId);
   }
@@ -228,6 +401,36 @@ export class CharacterConsistencyService {
       mimeType: image.mimeType,
       sha256: manifest.identity.canonicalSheet.sha256,
     };
+  }
+
+  async getAnimationFirstFrame({ characterId, animationId }) {
+    const animation = await this.#getAnimation(characterId, animationId);
+    const image = await this.store.readImage(characterId, animation.firstFrame.asset.path);
+    return { ...image, sha256: animation.firstFrame.asset.sha256 };
+  }
+
+  async getAnimationVideo({ characterId, animationId }) {
+    const animation = await this.#getAnimation(characterId, animationId);
+    if (animation.status !== 'SUCCEEDED' || !animation.video.asset) {
+      const error = new Error('Animation video was not found.');
+      error.code = 'ENOENT';
+      throw error;
+    }
+    const video = await this.store.readVideo(characterId, animation.video.asset.path);
+    return { ...video, sha256: animation.video.asset.sha256 };
+  }
+
+  async #getAnimation(characterId, animationId) {
+    assertId(characterId, 'Character ID');
+    assertId(animationId, 'Animation ID');
+    const manifest = await this.store.getCharacter(characterId);
+    const animation = manifest.animations?.find((item) => item.id === animationId);
+    if (!animation) {
+      const error = new Error('Animation was not found.');
+      error.code = 'ENOENT';
+      throw error;
+    }
+    return animation;
   }
 
   listCharacters() {

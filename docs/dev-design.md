@@ -235,6 +235,37 @@ The current interfaces provide natural replacement points:
 
 These are extension paths, not current scaffolding. The project should add them only when a measured requirement appears.
 
+## Approved animation extension
+
+Milestone 0.4 adds cinematic image-to-video as a derived-asset workflow. The canonical sheet remains the identity authority, but it is not itself a suitable first frame because it contains three figures in one horizontal composition. The service therefore derives one immutable landscape first frame from the sheet before starting a video task.
+
+The sheet also owns wardrobe continuity. Creator animation text is subordinate and may direct setting, lighting, camera, pose, action, expression, and environmental movement only. It cannot replace, restyle, recolor, add, or remove the canonical outfit or wearable accessories. Both the first-frame and motion prompt enforce this rule so wardrobe cannot drift at either provider boundary.
+
+```mermaid
+flowchart LR
+    Sheet[Canonical sheet]
+    Brief[Creator scene and motion brief]
+    FramePrompt[Versioned first-frame prompt]
+    ImageProvider[GPT Image adapter]
+    Frame[Immutable first frame]
+    MotionPrompt[Versioned motion prompt]
+    VideoProvider[Runway adapter]
+    Task[Persisted asynchronous task]
+    Video[Immutable local MP4]
+
+    Sheet --> FramePrompt
+    Brief --> FramePrompt
+    FramePrompt --> ImageProvider
+    ImageProvider --> Frame
+    Brief --> MotionPrompt
+    Frame --> VideoProvider
+    MotionPrompt --> VideoProvider
+    VideoProvider --> Task
+    Task --> Video
+```
+
+Runway output URLs are temporary and are never treated as stored assets. On success, the server downloads the MP4, verifies the response, stores it under the owning character, records its hash and provider provenance, and only then returns a local immutable URL. A task timeout or lost client connection does not imply cancellation and must not trigger an automatic retry.
+
 ## Public-production gates
 
 Before exposing the toolkit to multiple users, the design requires a separate milestone covering:

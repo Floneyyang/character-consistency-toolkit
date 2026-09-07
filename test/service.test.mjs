@@ -13,6 +13,7 @@ const PNG = Buffer.from(
 const JPEG = Buffer.from([
   0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
 ]);
+const MP4 = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
 
 class FakeImageProvider {
   constructor() {
@@ -37,6 +38,40 @@ class FakeImageProvider {
   }
 }
 
+class FakeVideoProvider {
+  constructor() {
+    this.calls = [];
+    this.status = 'PENDING';
+  }
+
+  async create(request) {
+    this.calls.push(request);
+    return {
+      taskId: '12345678-1234-1234-1234-123456789abc',
+      provenance: {
+        provider: 'fake-video',
+        model: 'fake-video-v1',
+        requestId: '12345678-1234-1234-1234-123456789abc',
+        startedAt: '2026-08-29T12:00:00.000Z',
+        parameters: { ratio: request.ratio, duration: request.duration },
+      },
+    };
+  }
+
+  async retrieve() {
+    return {
+      status: this.status,
+      outputUrl: this.status === 'SUCCEEDED' ? 'https://example.test/video.mp4' : null,
+      failure: null,
+      completedAt: '2026-08-29T12:00:03.000Z',
+    };
+  }
+
+  async download() {
+    return { bytes: MP4, mimeType: 'video/mp4' };
+  }
+}
+
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'character-lab-test-'));
   const approvedPath = join(directory, 'approved.png');
@@ -45,12 +80,14 @@ async function fixture() {
   await writeFile(photoPath, JPEG);
   const store = new FileCharacterStore(join(directory, 'data'));
   const provider = new FakeImageProvider();
+  const videoProvider = new FakeVideoProvider();
   const service = new CharacterConsistencyService({
     store,
     imageProvider: provider,
+    videoProvider,
     clock: () => new Date('2026-08-29T12:00:02.000Z'),
   });
-  return { directory, approvedPath, photoPath, store, provider, service };
+  return { directory, approvedPath, photoPath, store, provider, videoProvider, service };
 }
 
 test('creates a canonical sheet with explicit primary and secondary references', async (t) => {
@@ -178,6 +215,100 @@ test('preserves source wardrobe when no outfit direction is supplied', async (t)
   assert.deepEqual(character.identity.creationInputs, { outfitDirection: null });
   assert.match(context.provider.calls[0].prompt, /No wardrobe direction was supplied/);
   assert.match(context.provider.calls[0].prompt, /Preserve the visible clothing/);
+});
+
+test('creates and completes an animation derived only from the canonical sheet', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+  const character = await context.service.createCharacterSheetFromPhoto({
+    name: 'Mina',
+    photo: PNG,
+  });
+
+  const animation = await context.service.startAnimation({
+    characterId: character.id,
+    brief: 'She turns toward camera and smiles as her coat moves in the wind.',
+  });
+
+  assert.equal(animation.status, 'PENDING');
+  assert.equal(context.provider.calls.length, 2);
+  assert.deepEqual(
+    context.provider.calls[1].references.map((reference) => reference.role),
+    ['canonical-sheet'],
+  );
+  assert.equal(context.provider.calls[1].size, '1536x1024');
+  assert.match(context.provider.calls[1].prompt, /exactly one character/);
+  assert.match(context.provider.calls[1].prompt, /sole wardrobe authority/);
+  assert.match(context.provider.calls[1].prompt, /retain the canonical outfit unchanged/);
+  assert.equal(context.videoProvider.calls.length, 1);
+  assert.equal(context.videoProvider.calls[0].duration, 5);
+  assert.equal(context.videoProvider.calls[0].ratio, '1280:720');
+  assert.match(context.videoProvider.calls[0].prompt, /turns toward camera/);
+  assert.match(context.videoProvider.calls[0].prompt, /first frame is the sole authority/);
+  assert.match(context.videoProvider.calls[0].prompt, /Do not replace, restyle, simplify, recolor/);
+  assert.equal(animation.firstFrame.generation.prompt.version, 'v2');
+  assert.equal(animation.video.generation.prompt.version, 'v2');
+
+  context.videoProvider.status = 'SUCCEEDED';
+  const completed = await context.service.refreshAnimation({
+    characterId: character.id,
+    animationId: animation.id,
+  });
+  assert.equal(completed.status, 'SUCCEEDED');
+  assert.equal(completed.video.asset.mimeType, 'video/mp4');
+  const storedVideo = await context.service.getAnimationVideo({
+    characterId: character.id,
+    animationId: animation.id,
+  });
+  assert.deepEqual(storedVideo.bytes, MP4);
+  const persisted = await context.store.getCharacter(character.id);
+  assert.equal(persisted.animations.length, 1);
+  assert.equal(persisted.animations[0].video.generation.provider, 'fake-video');
+});
+
+test('rejects an invalid animation brief before paid generation', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+  const character = await context.service.createCharacterSheetFromPhoto({
+    name: 'Mina',
+    photo: PNG,
+  });
+
+  await assert.rejects(
+    () => context.service.startAnimation({ characterId: character.id, brief: 'x' }),
+    /3 to 500 characters/,
+  );
+  assert.equal(context.provider.calls.length, 1);
+  assert.equal(context.videoProvider.calls.length, 0);
+});
+
+test('persists a failed animation attempt instead of erasing paid-work lineage', async (t) => {
+  const context = await fixture();
+  t.after(() => rm(context.directory, { recursive: true, force: true }));
+  const character = await context.service.createCharacterSheetFromPhoto({
+    name: 'Mina',
+    photo: PNG,
+  });
+  context.provider.generate = async () => {
+    const error = new Error('image provider failed');
+    error.kind = 'moderated';
+    throw error;
+  };
+
+  await assert.rejects(
+    () =>
+      context.service.startAnimation({
+        characterId: character.id,
+        brief: 'She turns toward camera and smiles.',
+      }),
+    /image provider failed/,
+  );
+
+  const persisted = await context.store.getCharacter(character.id);
+  assert.equal(persisted.animations.length, 1);
+  assert.equal(persisted.animations[0].status, 'FAILED');
+  assert.equal(persisted.animations[0].failureCategory, 'moderated');
+  assert.equal(context.videoProvider.calls.length, 0);
 });
 
 test('rejects an outfit direction longer than 500 characters before generation', async (t) => {

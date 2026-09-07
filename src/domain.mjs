@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{7,80}$/;
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 export function createId(prefix) {
   return `${prefix}-${randomUUID()}`;
@@ -40,6 +41,14 @@ export function assertOutfitDirection(value) {
     throw new Error('Outfit direction must contain no more than 500 characters.');
   }
   return direction;
+}
+
+export function assertAnimationBrief(value) {
+  const brief = typeof value === 'string' ? value.trim() : '';
+  if (brief.length < 3 || brief.length > 500) {
+    throw new Error('Animation direction must contain 3 to 500 characters.');
+  }
+  return brief;
 }
 
 export function sha256(bytesOrText) {
@@ -92,6 +101,19 @@ export function assertImage(bytes, label = 'Image') {
   return mimeType;
 }
 
+export function assertMp4(bytes, label = 'Video') {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 12) {
+    throw new Error(`${label} is empty or invalid.`);
+  }
+  if (bytes.length > MAX_VIDEO_BYTES) {
+    throw new Error(`${label} exceeds the 100 MB limit.`);
+  }
+  if (bytes.subarray(4, 8).toString('ascii') !== 'ftyp') {
+    throw new Error(`${label} must be an MP4 video.`);
+  }
+  return 'video/mp4';
+}
+
 export function extensionForMimeType(mimeType) {
   if (mimeType === 'image/jpeg') return 'jpg';
   if (mimeType === 'image/webp') return 'webp';
@@ -113,6 +135,9 @@ export function assertCharacterManifest(value) {
   }
   if (!Array.isArray(value.variations)) {
     throw new Error('Character variations are invalid.');
+  }
+  if (value.animations != null && !Array.isArray(value.animations)) {
+    throw new Error('Character animations are invalid.');
   }
   return value;
 }

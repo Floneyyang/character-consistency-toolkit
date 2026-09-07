@@ -2,12 +2,15 @@ import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { assertImage, decodeBase64Image } from './domain.mjs';
 import { ImageProviderError } from './openai-image-provider.mjs';
+import { VideoProviderError } from './runway-video-provider.mjs';
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const MAX_JSON_BYTES = 21 * 1024 * 1024;
 const STATIC_FILES = new Map([
   ['/', 'index.html'],
+  ['/animate.html', 'animate.html'],
   ['/app.js', 'app.js'],
+  ['/animate.js', 'animate.js'],
   ['/styles.css', 'styles.css'],
 ]);
 const CONTENT_TYPES = {
@@ -74,6 +77,9 @@ function publicGenerationError(error) {
     if (error.kind === 'moderated') {
       return new HttpError(422, 'INPUT_REJECTED', 'The image provider rejected this input.');
     }
+    if (error.kind === 'outcome-unknown') {
+      return new HttpError(503, 'OUTCOME_UNKNOWN', 'The image provider did not confirm the request outcome. Do not retry yet.');
+    }
     if (error.kind === 'invalid-reference' || error.kind === 'invalid-request') {
       return new HttpError(422, 'INVALID_INPUT', 'The image provider could not use this image.');
     }
@@ -82,25 +88,69 @@ function publicGenerationError(error) {
     }
     return new HttpError(503, 'GENERATION_UNAVAILABLE', 'Character-sheet generation is unavailable.');
   }
+  if (error instanceof VideoProviderError) {
+    if (error.kind === 'configuration') {
+      return new HttpError(503, 'ANIMATION_NOT_CONFIGURED', 'Add RUNWAYML_API_SECRET to the local .env file.');
+    }
+    if (error.kind === 'rate-limited') {
+      return new HttpError(429, 'RATE_LIMITED', 'The video provider is busy. Please try again shortly.');
+    }
+    if (error.kind === 'moderated' || error.kind === 'invalid-request') {
+      return new HttpError(422, 'INPUT_REJECTED', 'The video provider rejected this animation.');
+    }
+    if (error.kind === 'outcome-unknown') {
+      return new HttpError(503, 'OUTCOME_UNKNOWN', 'The video provider did not confirm the task outcome. Do not retry yet.');
+    }
+    if (error.kind === 'timeout') {
+      return new HttpError(504, 'ANIMATION_TIMEOUT', 'The video provider took too long to respond. Check the saved task again.');
+    }
+    return new HttpError(503, 'ANIMATION_UNAVAILABLE', 'Video generation is currently unavailable.');
+  }
   if (error?.code === 'ENOENT') {
-    return new HttpError(404, 'NOT_FOUND', 'The requested character sheet was not found.');
+    return new HttpError(404, 'NOT_FOUND', 'The requested local resource was not found.');
   }
   if (
     error instanceof Error &&
-    /image|character name|outfit direction/i.test(error.message)
+    /image|character name|outfit direction|animation direction/i.test(error.message)
   ) {
     return new HttpError(400, 'INVALID_INPUT', error.message);
   }
   return new HttpError(500, 'INTERNAL_ERROR', 'The local server could not complete the request.');
 }
 
-export function createWebApp({ service, providerConfigured, webDirectory }) {
+function publicAnimation(animation, characterId) {
+  return {
+    id: animation.id,
+    brief: animation.brief,
+    status: animation.status,
+    firstFrameUrl: animation.firstFrame
+      ? `/api/characters/${encodeURIComponent(characterId)}/animations/${encodeURIComponent(animation.id)}/first-frame`
+      : null,
+    videoUrl:
+      animation.status === 'SUCCEEDED' && animation.video?.asset
+        ? `/api/characters/${encodeURIComponent(characterId)}/animations/${encodeURIComponent(animation.id)}/video`
+        : null,
+    failureCategory: animation.failureCategory ?? animation.video?.failureCategory ?? null,
+  };
+}
+
+export function createWebApp({
+  service,
+  providerConfigured,
+  videoProviderConfigured = false,
+  webDirectory,
+}) {
   return async function handleRequest(request, response) {
     setSecurityHeaders(response);
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     try {
       if (request.method === 'GET' && url.pathname === '/api/health') {
         sendJson(response, 200, { ready: providerConfigured });
+        return;
+      }
+
+      if (request.method === 'GET' && url.pathname === '/api/animation-health') {
+        sendJson(response, 200, { ready: providerConfigured && videoProviderConfigured });
         return;
       }
 
@@ -158,6 +208,84 @@ export function createWebApp({ service, providerConfigured, webDirectory }) {
         response.setHeader('cache-control', 'private, max-age=31536000, immutable');
         response.setHeader('etag', etag);
         response.end(sheet.bytes);
+        return;
+      }
+
+      const characterMatch = url.pathname.match(/^\/api\/characters\/([^/]+)$/);
+      if (request.method === 'GET' && characterMatch) {
+        if (!service) throw new HttpError(503, 'NOT_CONFIGURED', 'The local service is unavailable.');
+        const characterId = decodeURIComponent(characterMatch[1]);
+        const character = await service.getCharacter(characterId);
+        sendJson(response, 200, {
+          character: {
+            id: character.id,
+            name: character.name,
+            imageUrl: `/api/characters/${encodeURIComponent(character.id)}/canonical-sheet`,
+            animations: (character.animations ?? []).map((animation) =>
+              publicAnimation(animation, character.id),
+            ),
+          },
+        });
+        return;
+      }
+
+      const animationsMatch = url.pathname.match(/^\/api\/characters\/([^/]+)\/animations$/);
+      if (request.method === 'POST' && animationsMatch) {
+        if (!providerConfigured || !videoProviderConfigured || !service) {
+          throw new HttpError(503, 'ANIMATION_NOT_CONFIGURED', 'Add OPENAI_API_KEY and RUNWAYML_API_SECRET to the local .env file.');
+        }
+        if (!request.headers['content-type']?.startsWith('application/json')) {
+          throw new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Send the animation request as JSON.');
+        }
+        const payload = await readJsonBody(request);
+        const characterId = decodeURIComponent(animationsMatch[1]);
+        const animation = await service.startAnimation({
+          characterId,
+          brief: payload?.brief,
+        });
+        sendJson(response, 202, { animation: publicAnimation(animation, characterId) });
+        return;
+      }
+
+      const animationMatch = url.pathname.match(
+        /^\/api\/characters\/([^/]+)\/animations\/([^/]+)$/,
+      );
+      if (request.method === 'GET' && animationMatch) {
+        if (!service) throw new HttpError(503, 'NOT_CONFIGURED', 'The local service is unavailable.');
+        const characterId = decodeURIComponent(animationMatch[1]);
+        const animation = await service.refreshAnimation({
+          characterId,
+          animationId: decodeURIComponent(animationMatch[2]),
+        });
+        sendJson(response, 200, { animation: publicAnimation(animation, characterId) });
+        return;
+      }
+
+      const animationAssetMatch = url.pathname.match(
+        /^\/api\/characters\/([^/]+)\/animations\/([^/]+)\/(first-frame|video)$/,
+      );
+      if (request.method === 'GET' && animationAssetMatch) {
+        if (!service) throw new HttpError(503, 'NOT_CONFIGURED', 'The local service is unavailable.');
+        const ids = {
+          characterId: decodeURIComponent(animationAssetMatch[1]),
+          animationId: decodeURIComponent(animationAssetMatch[2]),
+        };
+        const asset =
+          animationAssetMatch[3] === 'first-frame'
+            ? await service.getAnimationFirstFrame(ids)
+            : await service.getAnimationVideo(ids);
+        const etag = `"${asset.sha256}"`;
+        if (request.headers['if-none-match'] === etag) {
+          response.statusCode = 304;
+          response.end();
+          return;
+        }
+        response.statusCode = 200;
+        response.setHeader('content-type', asset.mimeType);
+        response.setHeader('content-length', asset.bytes.length);
+        response.setHeader('cache-control', 'private, max-age=31536000, immutable');
+        response.setHeader('etag', etag);
+        response.end(asset.bytes);
         return;
       }
 

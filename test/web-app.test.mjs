@@ -148,3 +148,87 @@ test('returns a public validation error for an oversized outfit direction', asyn
     },
   });
 });
+
+test('serves the animation workspace and reports separate provider readiness', async (t) => {
+  const server = await startTestServer({
+    service: null,
+    providerConfigured: true,
+    videoProviderConfigured: false,
+  });
+  t.after(server.close);
+
+  const page = await fetch(`${server.baseUrl}/animate.html?character=character-12345678`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Bring your character to life/);
+
+  const health = await fetch(`${server.baseUrl}/api/animation-health`);
+  assert.deepEqual(await health.json(), { ready: false });
+});
+
+test('starts, refreshes, and serves a persisted animation', async (t) => {
+  const MP4 = Buffer.from([
+    0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+  ]);
+  const pending = {
+    id: 'animation-12345678',
+    brief: 'She turns and smiles.',
+    status: 'PENDING',
+    firstFrame: { asset: { path: 'first-frame.png' } },
+    video: { asset: null },
+  };
+  const complete = {
+    ...pending,
+    status: 'SUCCEEDED',
+    video: { asset: { path: 'animation.mp4' } },
+  };
+  const service = {
+    async getCharacter() {
+      return { id: 'character-12345678', name: 'Mina', animations: [pending] };
+    },
+    async startAnimation(input) {
+      assert.equal(input.brief, 'She turns and smiles.');
+      return pending;
+    },
+    async refreshAnimation() {
+      return complete;
+    },
+    async getAnimationFirstFrame() {
+      return { bytes: PNG, mimeType: 'image/png', sha256: 'frame-hash' };
+    },
+    async getAnimationVideo() {
+      return { bytes: MP4, mimeType: 'video/mp4', sha256: 'video-hash' };
+    },
+  };
+  const server = await startTestServer({
+    service,
+    providerConfigured: true,
+    videoProviderConfigured: true,
+  });
+  t.after(server.close);
+
+  const character = await fetch(`${server.baseUrl}/api/characters/character-12345678`);
+  assert.equal(character.status, 200);
+  assert.equal((await character.json()).character.animations.length, 1);
+
+  const created = await fetch(
+    `${server.baseUrl}/api/characters/character-12345678/animations`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ brief: 'She turns and smiles.' }),
+    },
+  );
+  assert.equal(created.status, 202);
+  assert.equal((await created.json()).animation.status, 'PENDING');
+
+  const refreshed = await fetch(
+    `${server.baseUrl}/api/characters/character-12345678/animations/animation-12345678`,
+  );
+  const refreshedPayload = await refreshed.json();
+  assert.equal(refreshedPayload.animation.status, 'SUCCEEDED');
+  assert.match(refreshedPayload.animation.videoUrl, /\/video$/);
+
+  const video = await fetch(`${server.baseUrl}${refreshedPayload.animation.videoUrl}`);
+  assert.equal(video.headers.get('content-type'), 'video/mp4');
+  assert.deepEqual(Buffer.from(await video.arrayBuffer()), MP4);
+});
