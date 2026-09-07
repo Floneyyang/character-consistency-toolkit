@@ -2,172 +2,85 @@
 
 An open-source experimentation toolkit for preserving character identity across generative image and video workflows.
 
-The system turns a primary visual reference into an immutable, canonical three-panel character sheet. That sheet becomes the visual source of truth for identity-locked variations, animation first frames, and generated video. The work extends beyond prompt engineering: the toolkit defines reference authority, enforces generation invariants, separates providers, and records the lineage of every generated asset.
+The toolkit converts a source reference into an immutable canonical character sheet. That sheet becomes the visual authority for downstream OpenAI image generation and Runway animation, with versioned prompts, ordered references, and traceable provenance for every result.
 
 ```text
 Source Reference
       ↓
 Canonical Character Sheet
       ↓
-Identity-Locked Generation
+Identity-Locked Image
       ↓
 Animation First Frame
       ↓
 Generated Video
 ```
 
-## Demo
+## Example
 
-Public demo media is not yet committed to this repository. This placeholder identifies the sanitized assets needed for a complete visual walkthrough without presenting generated examples as real project output:
+Sanitized demo media is not yet committed. The local application generates and displays real character sheets, derived images, and animations; private working assets remain in the Git-ignored `data/` directory.
 
-```text
-docs/assets/demo/source-reference.jpg
-        ↓
-docs/assets/demo/canonical-character-sheet.png
-        ↓
-docs/assets/demo/identity-locked-shot.png
-        ↓
-docs/assets/demo/identity-locked-animation.mp4
-```
+## Why this exists
 
-The local application displays and downloads real generated sheets and animations. Files under the Git-ignored `data/` directory are private working assets and are intentionally not embedded here.
+Generative models can create an appealing character once while changing the face, proportions, hair, clothing, or visual medium in the next shot. Text prompts alone do not provide a stable identity anchor, and multiple references become ambiguous without explicit precedence.
 
-## The problem
+This project treats character consistency as a system-design problem: define a canonical identity, control which inputs may change it, and preserve enough lineage to explain every generated asset.
 
-Generative models can produce an appealing character once while changing the face, proportions, hair, clothing, or visual medium in the next image or video. Words alone do not provide a stable identity anchor, and multiple reference images become ambiguous when their authority is not explicit.
-
-This toolkit explores a systems question: how can a character remain recognizable across models, shots, poses, environments, and animation while each result remains traceable to the inputs and generation strategy that produced it?
-
-## How it works
-
-The two entry paths use different source terminology:
-
-- **Website:** a **source photo** is the primary reference. It controls identity, hair, apparent age, body profile, and proportions. Optional text controls clothing, footwear, and wearable accessories only.
-- **CLI:** an **approved character image** is the primary reference. An optional **supporting photo** may provide secondary facial evidence, but cannot replace the approved character's medium, proportions, styling, outfit, or hair treatment.
-
-Both paths produce an immutable **canonical character sheet**. Downstream work uses the sheet—not the original source—as its visual authority:
+## System design
 
 ```mermaid
-flowchart TD
-    Photo[Website source photo]
-    Approved[CLI approved character image]
-    Supporting[Optional supporting photo<br/>secondary facial evidence only]
-    Sheet[Canonical character sheet<br/>immutable visual source of truth]
+flowchart LR
+    Source[Source reference]
+    Sheet[Canonical character sheet]
     Variation[Identity-locked variation]
-    Frame[Identity-locked animation first frame]
-    Video[Generated video]
-
-    Photo --> Sheet
-    Approved --> Sheet
-    Supporting -. ordered secondary reference .-> Sheet
-    Sheet --> Variation
-    Sheet --> Frame
-    Frame --> Video
-```
-
-## Design principles
-
-### Canonical identity
-
-The canonical sheet is the stable visual representation used by downstream generations. Returning to the original source for every new asset would allow the character's medium and construction to drift over time.
-
-### Ordered visual authority
-
-References are ordered and assigned explicit roles. A primary approved image and a secondary supporting photo are not treated as an interchangeable image collection; their precedence is part of the recorded generation request.
-
-### Generation provenance
-
-Each generated result records the exact rendered prompt and prompt SHA-256, ordered reference roles and asset hashes, provider, model, parameters, provider request ID, timestamps, and provider usage when returned. Prompt revisions are append-only after use so historical behavior remains explainable.
-
-### Provider-separated pipeline
-
-Image generation and video generation are separate stages behind server-side provider adapters. OpenAI GPT Image 2 creates sheets, variations, and animation first frames; Runway Gen-4 Turbo creates video from a first frame.
-
-### Safe experimentation
-
-Automated tests inject fake providers and never make live, paid API calls. The real provider adapters are tested with controlled HTTP responses for request construction, provenance, timeout, and error behavior.
-
-## Character invariant
-
-For animation, the canonical sheet controls both character identity and wardrobe. The creator's animation brief can direct the shot, but cannot redesign the character.
-
-```mermaid
-flowchart LR
-    Canonical[Canonical character sheet]
-    Identity[Identity<br/>face, age, skin tone, body proportions, hair, visual medium]
-    Wardrobe[Wardrobe<br/>silhouette, layers, materials, colors, footwear, wearables]
     Brief[Animation brief]
-    Direction[Direction<br/>setting, lighting, camera, pose, action, expression, environmental movement]
-    Generation[Identity-locked generation]
-    Result[Final animation]
+    Frame[Identity-locked first frame]
+    Runway[Runway video task]
+    Video[Immutable local MP4]
 
-    Canonical --> Identity --> Generation
-    Canonical --> Wardrobe --> Generation
-    Brief --> Direction --> Generation
-    Generation --> Result
+    Source -->|identity authority| Sheet
+    Sheet --> Variation
+    Sheet -->|identity and outfit authority| Frame
+    Brief -->|action, camera, setting, lighting| Frame
+    Frame --> Runway --> Video
 ```
 
-If an animation brief conflicts with the canonical outfit, the canonical sheet wins. The first-frame prompt and the video-motion prompt both enforce this constraint.
+The governing rules are:
 
-## Architecture
-
-```mermaid
-flowchart LR
-    Browser[Local browser UI]
-    API[Node.js HTTP boundary]
-    Service[Character consistency service]
-    Prompts[Versioned Markdown prompts]
-    Images[OpenAI image adapter]
-    Video[Runway video adapter]
-    Store[Immutable file store]
-    Manifest[Atomic provenance manifest]
-
-    Browser -->|same-origin requests| API
-    API --> Service
-    Service --> Prompts
-    Service --> Images
-    Service --> Video
-    Service --> Store
-    Store --> Manifest
-```
-
-- `web/` owns local interaction, progress, preview, and download behavior.
-- `src/web-app.mjs` validates HTTP input, verifies image types, maps safe public errors, and serves immutable assets.
-- `src/service.mjs` owns workflow, authority rules, reference ordering, provenance assembly, and failure cleanup.
-- `src/prompt.mjs` and `prompts/` own versioned prompt rendering and hashes.
-- `src/openai-image-provider.mjs` and `src/runway-video-provider.mjs` isolate provider-specific transport and errors.
-- `src/store.mjs` owns safe paths, immutable writes, atomic manifest replacement, and permanent deletion.
+- **Canonical identity:** downstream generation uses the canonical sheet rather than repeatedly interpreting the original source.
+- **Ordered authority:** every image reference has an explicit role and precedence. An optional supporting photo supplies secondary facial evidence only.
+- **Character invariant:** for animation, the canonical sheet controls identity, proportions, hair, visual medium, and outfit. The animation brief may control action, expression, setting, lighting, environmental movement, camera, and pose.
+- **Traceable generation:** assets retain exact rendered prompts and prompt hashes, ordered reference hashes, provider/model metadata, parameters, request IDs, timestamps, and usage when returned.
+- **Provider separation:** OpenAI GPT Image 2 creates sheets, variations, and first frames; Runway Gen-4 Turbo creates video through a separate server-side adapter.
+- **Safe experimentation:** automated tests inject fake providers and never make paid API calls.
 
 ## Capabilities
 
-- Local character records and immutable image/video storage
-- Photo-to-canonical-sheet generation in the local website
+- Photo-to-canonical-sheet generation through a local website
 - Approved-character and optional supporting-photo generation through the CLI
 - Identity-locked variation generation through the CLI
-- Explicit ordered-reference hierarchy
-- Versioned Markdown prompts with rendered prompt hashes
-- Exact generation provenance and asset SHA-256 hashes
-- Five-second animation generation and download through the linked animation workspace
-- Persisted Runway task state and resumable status polling
-- Permanent deletion of a character and all locally owned source and generated assets
-- Dependency-free Node.js web application and CLI
-- Fake-provider tests with no paid API calls
+- Five-second animation generation and download
+- Persisted Runway task state with resumable status polling
+- Immutable local image/video storage and SHA-256 asset hashes
+- Versioned Markdown prompts and complete generation provenance
+- Permanent deletion of a character and all locally owned assets
+- Dependency-free Node.js application with fake-provider tests
 
-## Requirements
+## Quick start
+
+### Requirements
 
 - Node.js 22 or newer
 - An OpenAI API key with GPT Image access
-- A Runway API key for animation; character-sheet generation works without it
+- A Runway API key for animation; sheet generation works without it
 
-The image workflow uses the Image API's edits endpoint because it generates from ordered image references. See OpenAI's [image generation guide](https://developers.openai.com/api/docs/guides/image-generation), the [GPT Image 2 model page](https://developers.openai.com/api/docs/models/gpt-image-2), and Runway's [API guide](https://docs.dev.runwayml.com/guides/using-the-api/).
-
-## Setup
+Create the local environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-Add your keys and configuration to `.env`:
+Add your keys and configuration:
 
 ```dotenv
 OPENAI_API_KEY=your_key_here
@@ -179,50 +92,40 @@ CHARACTER_LAB_DATA_DIR=./data
 PORT=4173
 ```
 
-Only `OPENAI_API_KEY` is required for character-sheet generation. `RUNWAYML_API_SECRET` is additionally required for animation. Restart the local server after changing `.env`.
-
-## Use the local website
-
-Start the localhost server:
+Start the local website:
 
 ```bash
 npm run dev
 ```
 
-Then open [http://127.0.0.1:4173](http://127.0.0.1:4173):
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173). Restart the server after changing `.env`.
 
-1. Enter an optional character name.
-2. Optionally describe the character's clothing, footwear, and wearable accessories.
-3. Drop in one clear PNG, JPEG, or WebP source photo.
-4. Select **Create character sheet**.
-5. Keep the page open while GPT Image creates the three coordinated views.
-6. Review and download the canonical sheet.
-7. Select **Bring this character to life** to open the animation workspace.
+The image workflow uses OpenAI's Image API edits endpoint to generate from ordered references. See the [image generation guide](https://developers.openai.com/api/docs/guides/image-generation), [GPT Image 2 model page](https://developers.openai.com/api/docs/models/gpt-image-2), and [Runway API guide](https://docs.dev.runwayml.com/guides/using-the-api/).
 
-## Animation workflow
+## Website workflow
+
+1. Enter an optional character name and outfit direction.
+2. Drop in one clear PNG, JPEG, or WebP source photo.
+3. Create, review, and download the three-panel canonical sheet.
+4. Select **Bring this character to life**.
+5. Describe a short moment, then review and download the five-second animation.
+
+The source photo controls identity, hair, apparent age, body profile, and proportions. Optional sheet-generation text controls clothing, footwear, and wearable accessories only.
+
+Animation uses two stages:
 
 ```text
-Canonical character sheet
--> GPT Image identity-locked 16:9 first frame
--> Runway Gen-4 Turbo five-second video task
--> Immutable local MP4
+Canonical sheet
+-> GPT Image 16:9 first frame
+-> Runway Gen-4 Turbo video task
+-> Local MP4
 ```
 
-Describe one short moment in the animation workspace. The brief may control the environment and performance described in [Character invariant](#character-invariant), while the canonical identity and outfit remain fixed.
+The canonical sheet is the sole identity and wardrobe authority. Conflicting outfit instructions in an animation brief are ignored. Once a Runway task ID is persisted, reopening the animation workspace resumes status checks instead of submitting another paid task. Completed videos are downloaded locally because provider output URLs expire. See Runway's [pricing documentation](https://docs.dev.runwayml.com/guides/pricing/).
 
-Runway processing is asynchronous. Once a task ID is persisted, reopening the animation workspace resumes status checks rather than submitting another paid task. On success, the server downloads the MP4 into immutable local storage because provider output URLs expire. Current Runway pricing is available in the provider's [pricing documentation](https://docs.dev.runwayml.com/guides/pricing/).
+## CLI
 
-## Use the CLI
-
-Create a character from an approved character image:
-
-```bash
-node --env-file=.env src/cli.mjs create \
-  --name "Mina" \
-  --approved "/absolute/path/to/approved-character.png"
-```
-
-Optionally add the original photo as secondary facial evidence:
+Create a character from an approved image, optionally with a supporting photo:
 
 ```bash
 node --env-file=.env src/cli.mjs create \
@@ -231,9 +134,9 @@ node --env-file=.env src/cli.mjs create \
   --supporting-photo "/absolute/path/to/source-photo.jpg"
 ```
 
-The approved character remains authoritative for visual medium, proportions, styling, hair treatment, outfit, and overall identity. The supporting photo cannot replace it.
+The approved image remains authoritative for identity, medium, proportions, styling, hair, and outfit. The optional photo provides secondary facial evidence only.
 
-Create an identity-locked variation:
+Create a variation:
 
 ```bash
 node --env-file=.env src/cli.mjs vary \
@@ -241,29 +144,29 @@ node --env-file=.env src/cli.mjs vary \
   --brief "A winter explorer edition in a red technical coat, standing in snow."
 ```
 
-Inspect local records:
+Inspect or permanently delete local records:
 
 ```bash
 node src/cli.mjs list
 node src/cli.mjs show --character "character-..."
-```
-
-Permanently delete a character and every locally stored source and generated asset:
-
-```bash
 node src/cli.mjs delete --character "character-..." --yes
 ```
 
-## Reproducibility and persistence
+Omit `--supporting-photo` when creating from only an approved character image.
 
-The toolkit targets **experimental reproducibility**, not pixel-identical regeneration from a nondeterministic model. Its manifest retains the conditions needed to explain and compare a result after prompts, code, or providers change:
+## Reproducibility and safety
 
-- exact rendered prompt, immutable prompt revision, and prompt SHA-256;
-- ordered reference roles, MIME types, and SHA-256 hashes;
-- output asset paths, MIME types, byte counts, and SHA-256 hashes;
-- provider, model, request ID, parameters, timestamps, and usage when available.
+The toolkit targets experimental reproducibility rather than pixel-identical output from nondeterministic models.
 
-Local data uses this structure:
+- Prompts are immutable, versioned Markdown files.
+- Generated assets are never overwritten.
+- Asset and prompt SHA-256 hashes detect byte-level changes.
+- Manifest updates are atomic, and orphaned outputs are removed after commit failures.
+- Unknown billable request outcomes are recorded and are not automatically retried.
+- API keys remain in the local Node.js process and never enter browser code.
+- The server binds only to `127.0.0.1`; `.env` and generated `data/` are Git-ignored.
+
+Character data is stored under:
 
 ```text
 data/characters/<character-id>/
@@ -271,41 +174,31 @@ data/characters/<character-id>/
 └── assets/
     ├── sources/
     ├── canonical/canonical-sheet.png
-    ├── variations/<variation-id>.png
+    ├── variations/
     └── animations/<animation-id>/
         ├── first-frame.png
         └── animation.mp4
 ```
 
-Assets are written without overwrite, and the manifest is replaced atomically. If canonical generation fails, staged character data is removed. If a generated variation or completed video cannot be committed to its manifest, the orphaned output is removed. Provider requests with an unknown billing outcome are not automatically retried.
-
-The website binds only to `127.0.0.1`. API keys remain in the Node.js process and are never sent to browser code. The `.env` file and generated `data/` directory are Git-ignored.
-
 ## Validation
-
-This project has no third-party runtime or test dependencies.
 
 ```bash
 npm run check
 ```
 
-The command runs syntax checks and Node.js tests. Pull requests and pushes to `main` run the same checks on Node.js 22 in GitHub Actions. Automated tests never call a live image or video provider.
+This runs syntax checks and Node.js tests. Pull requests and pushes to `main` run the same checks on Node.js 22 in GitHub Actions. Tests never call live image or video providers.
 
-## Current scope and limitations
+## Current scope
 
-- The toolkit assumes one trusted local user and one writer at a time.
-- Image generation is synchronous and may take several minutes.
-- Animation waits synchronously for its first frame; the Runway video task is asynchronous and can resume status checks after its task ID is stored.
-- Closing or refreshing the page does not cancel an in-flight provider request.
-- Billable requests with unknown outcomes are not retried automatically.
-- Evaluation is human review rather than an automated identity score.
-- Prompt effectiveness still requires testing across varied character styles, ages, body types, and presentation.
-- Character consistency means visual continuity, not face recognition or biometric identification.
+- One trusted local user and one writer at a time
+- Synchronous image and first-frame generation
+- Human identity review rather than automated scoring
+- No public hosting, accounts, database, background workers, cloud storage, biometric identification, or silent provider fallback
 
-Current non-goals include public hosting, user accounts, a database, concurrent background workers, cloud object storage, automatic retries, automated biometric evaluation, and a dependency on Floney's Doll Factory.
+Closing the page does not cancel an in-flight provider request. Billable operations with unknown outcomes require manual review rather than automatic retry.
 
 ## Design documentation
 
-- [Architecture](docs/architecture.md) describes the modules, generation flow, reference precedence, and persistence model.
-- [Development design](docs/dev-design.md) documents governing invariants, system diagrams, security decisions, reproducibility strategy, failure semantics, and production gates.
-- [Product roadmap](docs/roadmap.md) records completed milestones and future experiments.
+- [Architecture](docs/architecture.md): modules, data flow, reference precedence, and persistence
+- [Development design](docs/dev-design.md): invariants, security decisions, provenance, and failure semantics
+- [Product roadmap](docs/roadmap.md): completed milestones and future experiments
