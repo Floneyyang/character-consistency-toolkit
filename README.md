@@ -18,7 +18,23 @@ Generated Video
 
 ## Example
 
-Sanitized demo media is not yet committed. The local application generates and displays real character sheets, derived images, and animations; private working assets remain in the Git-ignored `data/` directory.
+### 1. Create a canonical character sheet
+
+Upload one source reference and optionally direct the outfit. The generated three-panel sheet becomes the character's visual source of truth.
+
+![Character sheet creation showing a teddy bear source reference and its generated three-panel canonical sheet](docs/assets/demo/canonical-sheet-workflow.png)
+
+### 2. Direct a short moment
+
+The animation workspace keeps the canonical sheet visible while the creator describes the action, setting, and camera direction.
+
+![Animation workspace generating a five-second dancing teddy bear scene from the canonical sheet](docs/assets/demo/animation-generation.png)
+
+### 3. Review the generated animation
+
+The completed first frame and locally persisted video remain linked to the same canonical character.
+
+![Completed animation workspace showing the identity-locked first frame and generated teddy bear video](docs/assets/demo/completed-animation.png)
 
 ## Why this exists
 
